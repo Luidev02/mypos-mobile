@@ -1,14 +1,14 @@
 import { Colors, FontSize, FontWeight, Spacing } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
-  ActivityIndicator,
-  Modal,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Modal,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 interface BarcodeScannerProps {
