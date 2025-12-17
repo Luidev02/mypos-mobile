@@ -23,29 +23,12 @@ export default function CalculatorModal({ visible, onClose }: CalculatorModalPro
     expressionRef.current = expression;
   }, [expression]);
 
-  // Escuchar teclado cuando modal está abierto
+  // Reset calculator when modal closes
   useEffect(() => {
     if (!visible) {
       setExpression('');
       setResult('');
       expressionRef.current = '';
-      return;
-    }
-
-    const handleKeyPress = (e: any) => {
-      const key = e.key;
-      if (key >= '0' && key <= '9') handleInput(key);
-      else if (['+', '-', '*', '/'].includes(key)) handleInput(key);
-      else if (key === '.') handleInput('.');
-      else if (key === 'Enter' || key === '=') handleCalculate();
-      else if (key === 'Backspace') handleBackspace();
-      else if (key === 'Escape' || key === 'Delete') handleClear();
-    };
-
-    // Solo funciona en web
-    if (typeof window !== 'undefined') {
-      window.addEventListener('keydown', handleKeyPress);
-      return () => window.removeEventListener('keydown', handleKeyPress);
     }
   }, [visible]);
 

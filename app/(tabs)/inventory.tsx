@@ -1,5 +1,5 @@
 import { BorderRadius, Colors, FontSize, FontWeight, Shadow, Spacing } from '@/constants/theme';
-import { inventoryService } from '@/services';
+import { extendedInventoryService } from '@/services';
 import type { InventoryItem } from '@/types';
 import { formatCurrency, getStockColor } from '@/utils/helpers';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,8 +31,8 @@ export default function InventoryScreen() {
     try {
       setIsLoading(true);
       const data = filter === 'low' 
-        ? await inventoryService.getLowStock()
-        : await inventoryService.getInventory();
+        ? await extendedInventoryService.getLowStock()
+        : await extendedInventoryService.getInventory();
       setInventory(data);
     } catch (error) {
       Alert.alert('Error', 'No se pudo cargar el inventario');
