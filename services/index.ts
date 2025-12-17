@@ -54,29 +54,95 @@ class AuthService {
 
 class POSService {
   async getCategories(): Promise<Category[]> {
-    const response = await apiService.getToken<{ data: Category[] }>(ENDPOINTS.POS.CATEGORIES);
-    return response.data;
+    const response = await apiService.getToken<Category[] | { data: Category[] }>(ENDPOINTS.POS.CATEGORIES);
+    // Manejar ambos formatos de respuesta
+    return Array.isArray(response) ? response : response.data;
   }
 
-  async getProducts(): Promise<Product[]> {
-    const response = await apiService.getToken<{ data: Product[] }>(ENDPOINTS.POS.PRODUCTS);
-    return response.data;
+  async getCategoryProducts(categoryId: number): Promise<Product[]> {
+    const response = await apiService.getToken<Product[] | { data: Product[] }>(
+      ENDPOINTS.POS.CATEGORY_PRODUCTS(categoryId)
+    );
+    const products = Array.isArray(response) ? response : response.data;
+    
+    // Normalizar estructura de productos
+    return products.map(p => ({
+      id: p.product_id || p.id,
+      product_id: p.product_id || p.id,
+      name: p.title || p.name,
+      title: p.title || p.name,
+      sku: p.sku,
+      barcode: p.barcode,
+      price: parseFloat(p.price.toString()),
+      stock: parseFloat(p.stock?.toString() || '0'),
+      image: p.image,
+      category_id: p.category_id,
+    }));
   }
 
-  async getCustomers(): Promise<Customer[]> {
-    const response = await apiService.getToken<{ data: Customer[] }>(ENDPOINTS.POS.CUSTOMERS);
-    return response.data;
+  async searchProducts(query: string): Promise<Product[]> {
+    const response = await apiService.getToken<Product[] | { data: Product[] }>(
+      `${ENDPOINTS.POS.PRODUCTS_SEARCH}?q=${encodeURIComponent(query)}`
+    );
+    const products = Array.isArray(response) ? response : response.data;
+    
+    return products.map(p => ({
+      id: p.product_id || p.id,
+      product_id: p.product_id || p.id,
+      name: p.title || p.name,
+      title: p.title || p.name,
+      sku: p.sku,
+      barcode: p.barcode,
+      price: parseFloat(p.price.toString()),
+      stock: parseFloat(p.stock?.toString() || '0'),
+      image: p.image,
+      category_id: p.category_id,
+    }));
+  }
+
+  async searchCustomers(query: string): Promise<Customer[]> {
+    const response = await apiService.getToken<Customer[] | { data: Customer[] }>(
+      `${ENDPOINTS.POS.CUSTOMERS_SEARCH}?q=${encodeURIComponent(query)}`
+    );
+    return Array.isArray(response) ? response : response.data;
   }
 
   async createSale(saleData: CreateSaleRequest): Promise<Sale> {
-    const response = await apiService.postToken<{ data: Sale }>(ENDPOINTS.POS.SALES, saleData);
+    const response = await apiService.postToken<{ success: boolean; data: Sale; message: string }>(
+      ENDPOINTS.POS.SALES, 
+      saleData
+    );
+    return response.data;
+  }
+
+  async getRecentOrders(limit: number = 20): Promise<Sale[]> {
+    const response = await apiService.getToken<{ data: Sale[] }>(
+      `${ENDPOINTS.POS.ORDERS_RECENT}?limit=${limit}`
+    );
+    return response.data;
+  }
+
+  async getOrderDetail(orderId: number): Promise<Sale> {
+    const response = await apiService.getToken<{ data: Sale }>(
+      ENDPOINTS.POS.ORDER_DETAIL(orderId)
+    );
     return response.data;
   }
 
   async getActiveShift(): Promise<Shift | null> {
     try {
-      const response = await apiService.getToken<{ data: Shift }>(ENDPOINTS.POS.SHIFTS.ACTIVE);
-      return response.data;
+      const response = await apiService.getToken<Shift | { data: Shift }>(
+        ENDPOINTS.POS.SHIFTS.ACTIVE
+      );
+      
+      // Manejar diferentes formatos de respuesta
+      if (response && 'id' in response) {
+        return response as Shift;
+      } else if (response && 'data' in response) {
+        return response.data;
+      }
+      
+      return null;
     } catch (error: any) {
       if (error.response?.status === 404) {
         return null;
@@ -86,18 +152,40 @@ class POSService {
   }
 
   async openShift(data: OpenShiftRequest): Promise<Shift> {
-    const response = await apiService.postToken<{ data: Shift }>(ENDPOINTS.POS.SHIFTS.OPEN, data);
+    const response = await apiService.postToken<{ success: boolean; data: Shift; message: string }>(
+      ENDPOINTS.POS.SHIFTS.OPEN, 
+      data
+    );
     return response.data;
   }
 
-  async closeShift(data: CloseShiftRequest): Promise<Shift> {
-    const response = await apiService.postToken<{ data: Shift }>(ENDPOINTS.POS.SHIFTS.CLOSE, data);
+  async closeShift(shiftId: number, data: CloseShiftRequest): Promise<Shift> {
+    const response = await apiService.postToken<{ success: boolean; data: Shift; message: string }>(
+      ENDPOINTS.POS.SHIFTS.CLOSE(shiftId), 
+      data
+    );
     return response.data;
+  }
+
+  async getShiftDetail(shiftId: number): Promise<Shift> {
+    const response = await apiService.getToken<Shift | { data: Shift }>(
+      ENDPOINTS.POS.SHIFTS.DETAIL(shiftId)
+    );
+    return 'data' in response ? response.data : response;
+  }
+
+  async getShiftHistory(limit: number = 20): Promise<Shift[]> {
+    const response = await apiService.getToken<{ data: { history: Shift[]; total: number } }>(
+      `${ENDPOINTS.POS.SHIFTS.HISTORY}?limit=${limit}`
+    );
+    return response.data.history;
   }
 
   async getCashRegisters(): Promise<CashRegister[]> {
-    const response = await apiService.getToken<{ data: CashRegister[] }>(ENDPOINTS.POS.CASH_REGISTERS);
-    return response.data;
+    const response = await apiService.getToken<CashRegister[] | { data: CashRegister[] }>(
+      ENDPOINTS.POS.CASH_REGISTERS
+    );
+    return Array.isArray(response) ? response : response.data;
   }
 }
 

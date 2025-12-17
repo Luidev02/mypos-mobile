@@ -69,30 +69,44 @@ export interface CartItem {
 export interface SaleItem {
   product_id: number;
   quantity: number;
-  unit_price: number;
+  price: number; // Changed from unit_price to match backend
+  tax_rate: number; // Tasa de IVA (19 para Colombia)
   discount: number;
+  is_inventory_managed: boolean; // Indica si se descuenta del inventario
 }
 
 export interface CreateSaleRequest {
   customer_id: number;
-  sale_type: 'factura_electronica' | 'nota_venta';
+  cash_register_id: number; // Requerido - ID de la caja registradora
+  shift_id: number; // Requerido - ID del turno activo
+  warehouse_id: number; // Requerido - ID de la bodega (viene del turno)
   payment_method: 'cash' | 'transfer';
-  coupon_id?: number | null;
+  resolution_id?: number | null; // Opcional - Para facturación electrónica
+  invoice_number?: string | null; // Opcional - Número de factura
   items: SaleItem[];
-  amount_received: number;
 }
 
 export interface Sale {
   id: number;
-  folio: string;
+  sale_id?: number; // Alias de id
+  invoice_number?: string;
+  folio?: string; // Alias de invoice_number
+  customer_id?: number;
+  customer_name?: string;
+  customer_phone?: string;
   subtotal: number;
   tax: number;
+  tax_amount?: number; // Alias de tax
   discount: number;
   total: number;
-  change: number;
+  total_amount?: number; // Alias de total
+  change?: number;
   payment_method: string;
+  status?: string;
   invoice_url?: string;
   created_at: string;
+  items_count?: number;
+  items?: SaleItem[];
 }
 
 // Shift Types
@@ -100,28 +114,41 @@ export interface Shift {
   id: number;
   user_id: number;
   cash_register_id: number;
-  opening_amount: number;
-  closing_amount?: number;
-  opened_at: string;
-  closed_at?: string;
+  cash_register_name?: string;
+  cash_register_code?: string;
+  warehouse_id: number; // Requerido para las ventas
+  warehouse_name?: string;
+  base_amount: number; // Changed from opening_amount
+  final_cash_expected?: number;
+  final_cash_real?: number;
+  difference?: number;
+  start_time: string; // Changed from opened_at
+  end_time?: string; // Changed from closed_at
+  opened_at?: string; // Mantener compatibilidad
+  closed_at?: string; // Mantener compatibilidad
   status: 'open' | 'closed';
+  notes?: string;
+  hours_worked?: number;
 }
 
 export interface OpenShiftRequest {
   cash_register_id: number;
-  opening_amount: number;
+  base_amount: number;
 }
 
 export interface CloseShiftRequest {
-  shift_id: number;
-  closing_amount: number;
+  final_cash_real: number;
+  notes?: string;
 }
 
 // Cash Register Types
 export interface CashRegister {
   id: number;
   name: string;
+  code: string;
+  description?: string;
   is_active: boolean;
+  created_at?: string;
 }
 
 // Inventory Types

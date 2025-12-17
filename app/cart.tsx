@@ -1,28 +1,53 @@
 import { BorderRadius, Colors, FontSize, FontWeight, Shadow, Spacing } from '@/constants/theme';
+import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
 import { posService } from '@/services';
-import type { CartItem, CreateSaleRequest } from '@/types';
+import type { CartItem, CreateSaleRequest, Shift } from '@/types';
 import { calculateTax, calculateTotal, formatCurrency } from '@/utils/helpers';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-    Alert,
-    FlatList,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  FlatList,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function CartScreen() {
+  const { user } = useAuth();
   const { items, subtotal, updateQuantity, removeItem, clearCart } = useCart();
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer'>('cash');
   const [amountReceived, setAmountReceived] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [activeShift, setActiveShift] = useState<Shift | null>(null);
+  const [isLoadingShift, setIsLoadingShift] = useState(true);
+
+  useEffect(() => {
+    checkActiveShift();
+  }, []);
+
+  const checkActiveShift = async () => {
+    setIsLoadingShift(true);
+    try {
+      const shift = await posService.getActiveShift();
+      if (shift && shift.id) {
+        setActiveShift(shift);
+      } else {
+        setActiveShift(null);
+      }
+    } catch (error: any) {
+      console.log('No hay turno activo:', error);
+      setActiveShift(null);
+    } finally {
+      setIsLoadingShift(false);
+    }
+  };
 
   const TAX_RATE = 0.19; // 19% IVA
   const tax = calculateTax(subtotal, TAX_RATE);
@@ -58,6 +83,19 @@ export default function CartScreen() {
       return;
     }
 
+    // Validación de turno activo (igual que en web)
+    if (!activeShift || !activeShift.id) {
+      Alert.alert(
+        'Turno Requerido',
+        'Debes abrir un turno antes de procesar ventas. Ve a la pantalla de POS para abrir un turno.',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Ir a POS', onPress: () => router.replace('/(tabs)') }
+        ]
+      );
+      return;
+    }
+
     if (paymentMethod === 'cash' && (parseFloat(amountReceived || '0') < total)) {
       Alert.alert('Error', 'El monto recibido es menor al total');
       return;
@@ -65,24 +103,31 @@ export default function CartScreen() {
 
     setIsProcessing(true);
     try {
+      // Estructura exacta del flujo web
       const saleData: CreateSaleRequest = {
-        customer_id: 1, // Consumidor Final
-        sale_type: 'factura_electronica',
+        customer_id: 1, // Consumidor Final (igual que web)
+        cash_register_id: activeShift.cash_register_id,
+        shift_id: activeShift.id,
+        warehouse_id: activeShift.warehouse_id,
         payment_method: paymentMethod,
+        resolution_id: null, // Para facturación electrónica futura
+        invoice_number: null,
         items: items.map(item => ({
           product_id: item.product_id,
           quantity: item.quantity,
-          unit_price: item.unit_price,
-          discount: item.discount,
+          price: item.unit_price,
+          tax_rate: 19, // 19% IVA Colombia (igual que web)
+          discount: item.discount || 0,
+          is_inventory_managed: true, // Siempre descontar del inventario
         })),
-        amount_received: paymentMethod === 'cash' ? parseFloat(amountReceived) : total,
       };
 
-      const sale = await posService.createSale(saleData);
+      const response = await posService.createSale(saleData);
+      const sale = response; // response.data ya viene procesado del service
       
       Alert.alert(
         'Venta Exitosa',
-        `Folio: ${sale.folio}\nTotal: ${formatCurrency(sale.total)}${
+        `${sale.invoice_number || sale.folio || `Venta #${sale.id}`}\nTotal: ${formatCurrency(sale.total || sale.total_amount || 0)}${
           paymentMethod === 'cash' ? `\nCambio: ${formatCurrency(change)}` : ''
         }`,
         [
@@ -94,7 +139,11 @@ export default function CartScreen() {
         ]
       );
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.message || 'No se pudo procesar la venta');
+      console.error('Error al procesar venta:', error);
+      Alert.alert(
+        'Error al Procesar Venta',
+        error.response?.data?.message || error.message || 'No se pudo procesar la venta. Verifica que el turno esté activo.'
+      );
     } finally {
       setIsProcessing(false);
     }
@@ -131,6 +180,23 @@ export default function CartScreen() {
       </View>
     </View>
   );
+
+  if (isLoadingShift) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={24} color={Colors.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Carrito</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>Verificando turno activo...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (items.length === 0) {
     return (
@@ -170,6 +236,28 @@ export default function CartScreen() {
       />
 
       <View style={styles.summary}>
+        {/* Información del turno activo */}
+        {activeShift && (
+          <View style={styles.shiftInfo}>
+            <Ionicons name="checkmark-circle" size={20} color={Colors.success} />
+            <View style={styles.shiftInfoText}>
+              <Text style={styles.shiftInfoLabel}>Turno Activo</Text>
+              <Text style={styles.shiftInfoValue}>
+                {activeShift.cash_register_name || `Caja #${activeShift.cash_register_id}`}
+              </Text>
+            </View>
+          </View>
+        )}
+        {!activeShift && (
+          <View style={[styles.shiftInfo, styles.shiftInfoWarning]}>
+            <Ionicons name="warning" size={20} color={Colors.warning} />
+            <View style={styles.shiftInfoText}>
+              <Text style={styles.shiftInfoLabel}>Sin Turno Activo</Text>
+              <Text style={styles.shiftInfoValue}>Debes abrir un turno para vender</Text>
+            </View>
+          </View>
+        )}
+
         <View style={styles.summaryRow}>
           <Text style={styles.summaryLabel}>Subtotal:</Text>
           <Text style={styles.summaryValue}>{formatCurrency(subtotal)}</Text>
@@ -184,10 +272,13 @@ export default function CartScreen() {
         </View>
 
         <TouchableOpacity 
-          style={styles.checkoutButton}
+          style={[styles.checkoutButton, !activeShift && styles.checkoutButtonDisabled]}
           onPress={() => setShowPaymentModal(true)}
+          disabled={!activeShift}
         >
-          <Text style={styles.checkoutButtonText}>Procesar Pago</Text>
+          <Text style={styles.checkoutButtonText}>
+            {activeShift ? 'Procesar Pago' : 'Abre un Turno para Vender'}
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -392,11 +483,38 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.bold,
     color: Colors.primary,
   },
+  shiftInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.successLight,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  shiftInfoWarning: {
+    backgroundColor: Colors.warningLight,
+  },
+  shiftInfoText: {
+    flex: 1,
+  },
+  shiftInfoLabel: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
+    color: Colors.text,
+  },
+  shiftInfoValue: {
+    fontSize: FontSize.xs,
+    color: Colors.textLight,
+  },
   checkoutButton: {
     backgroundColor: Colors.primary,
     borderRadius: BorderRadius.md,
     padding: Spacing.md,
     alignItems: 'center',
+  },
+  checkoutButtonDisabled: {
+    backgroundColor: Colors.textLight,
   },
   checkoutButtonText: {
     fontSize: FontSize.lg,

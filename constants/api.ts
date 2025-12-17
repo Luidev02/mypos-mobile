@@ -17,15 +17,22 @@ export const ENDPOINTS = {
   // POS
   POS: {
     CATEGORIES: '/api/pos/categories',
-    PRODUCTS: '/api/pos/products',
-    CUSTOMERS: '/api/pos/customers',
+    CATEGORY_PRODUCTS: (id: number) => `/api/pos/categories/${id}/products`,
+    PRODUCTS_SEARCH: '/api/pos/products/search',
+    CUSTOMERS_SEARCH: '/api/pos/customers/search',
     SALES: '/api/pos/sales',
+    ORDERS_RECENT: '/api/pos/orders/recent',
+    ORDER_DETAIL: (id: number) => `/api/pos/orders/${id}`,
     SHIFTS: {
       ACTIVE: '/api/pos/shifts/active',
       OPEN: '/api/pos/shifts/open',
-      CLOSE: '/api/pos/shifts/close',
+      CLOSE: (id: number) => `/api/pos/shifts/${id}/close`,
+      DETAIL: (id: number) => `/api/pos/shifts/${id}`,
+      HISTORY: '/api/shifts/history/me',
+      CURRENT: '/api/shifts/active/current',
     },
     CASH_REGISTERS: '/api/pos/cash-registers',
+    CASH_REGISTER_DETAIL: (id: number) => `/api/pos/cash-registers/${id}`,
   },
 
   // Products

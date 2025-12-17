@@ -1,3 +1,4 @@
+import ShiftModal from '@/components/ShiftModal';
 import { BorderRadius, Colors, FontSize, FontWeight, Shadow, Spacing } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
@@ -35,9 +36,11 @@ export default function POSScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
   const [shift, setShift] = useState<Shift | null>(null);
   const [customer, setCustomer] = useState('Consumidor Final');
   const [orderType, setOrderType] = useState('Sin tipo');
+  const [showShiftModal, setShowShiftModal] = useState(false);
 
   // Calculate tax and total
   const tax = subtotal * 0.19; // 19% IVA
@@ -47,6 +50,29 @@ export default function POSScreen() {
     loadData();
   }, []);
 
+  // Debounced search (500ms like web version)
+  useEffect(() => {
+    if (searchQuery.trim() === '') {
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    const delayDebounceFn = setTimeout(async () => {
+      try {
+        const results = await posService.searchProducts(searchQuery);
+        setProducts(results);
+        setSelectedCategory(null); // Clear category selection
+      } catch (error: any) {
+        Alert.alert('Error', 'No se pudo realizar la búsqueda');
+      } finally {
+        setIsSearching(false);
+      }
+    }, 500);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchQuery]);
+
   const loadData = async () => {
     try {
       setIsLoading(true);
@@ -54,12 +80,17 @@ export default function POSScreen() {
         posService.getCategories(),
         posService.getActiveShift(),
       ]);
+      
       setCategories(categoriesData);
       setShift(activeShift);
       
+      // Si no hay turno activo, mostrar modal
+      if (!activeShift) {
+        setTimeout(() => setShowShiftModal(true), 500);
+      }
+      
       if (categoriesData.length > 0) {
-        setSelectedCategory(categoriesData[0].id);
-        setProducts(categoriesData[0].products || []);
+        await handleCategorySelect(categoriesData[0]);
       }
     } catch (error: any) {
       Alert.alert('Error', 'No se pudo cargar los datos');
@@ -74,15 +105,28 @@ export default function POSScreen() {
     setIsRefreshing(false);
   };
 
-  const handleCategorySelect = (category: Category) => {
-    setSelectedCategory(category.id);
-    setProducts(category.products || []);
-    setSearchQuery('');
+  const handleCategorySelect = async (category: Category) => {
+    try {
+      setSelectedCategory(category.id);
+      setSearchQuery(''); // Clear search when selecting category
+      const categoryProducts = await posService.getCategoryProducts(category.id);
+      setProducts(categoryProducts);
+    } catch (error: any) {
+      Alert.alert('Error', 'No se pudieron cargar los productos');
+    }
   };
 
   const handleProductPress = (product: Product) => {
+    // Verificar turno activo
     if (!shift) {
-      Alert.alert('Error', 'Debe abrir un turno antes de vender');
+      Alert.alert(
+        'Sin Turno Activo',
+        'Debe abrir un turno antes de realizar ventas',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Abrir Turno', onPress: () => setShowShiftModal(true) },
+        ]
+      );
       return;
     }
 
@@ -92,6 +136,15 @@ export default function POSScreen() {
     }
 
     addItem(product);
+  };
+
+  const handleShiftSuccess = async () => {
+    const activeShift = await posService.getActiveShift();
+    setShift(activeShift);
+  };
+
+  const handleOpenShift = () => {
+    setShowShiftModal(true);
   };
 
   const handlePay = () => {
@@ -118,11 +171,7 @@ export default function POSScreen() {
     );
   };
 
-  const filteredProducts = products.filter((product) =>
-    product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    product.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    product.barcode?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredProducts = searchQuery.trim() === '' ? products : products;
 
   const renderCategoryItem = ({ item }: { item: Category }) => (
     <TouchableOpacity
@@ -196,10 +245,10 @@ export default function POSScreen() {
       >
         <TouchableOpacity 
           style={[styles.actionButton, !shift && styles.actionButtonWarning]}
-          onPress={() => Alert.alert('Turnos', 'Gestión de turnos disponible pronto')}
+          onPress={handleOpenShift}
         >
           <Ionicons name="time-outline" size={16} color={Colors.white} />
-          <Text style={styles.actionButtonText}>{shift ? 'Turno' : 'Sin Turno'}</Text>
+          <Text style={styles.actionButtonText}>{shift ? 'Turno Activo' : 'Sin Turno'}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
@@ -262,12 +311,17 @@ export default function POSScreen() {
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
-        <TouchableOpacity style={styles.iconButton}>
-          <Ionicons name="barcode-outline" size={24} color={Colors.primary} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.iconButton}>
-          <Ionicons name="qr-code-outline" size={24} color={Colors.primary} />
-        </TouchableOpacity>
+        {isSearching && <ActivityIndicator size="small" color={Colors.primary} style={styles.iconButton} />}
+        {!isSearching && (
+          <>
+            <TouchableOpacity style={styles.iconButton}>
+              <Ionicons name="barcode-outline" size={24} color={Colors.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.iconButton}>
+              <Ionicons name="qr-code-outline" size={24} color={Colors.primary} />
+            </TouchableOpacity>
+          </>
+        )}
       </View>
 
       {/* Categories */}
@@ -319,6 +373,13 @@ export default function POSScreen() {
           <Ionicons name="chevron-forward" size={24} color={Colors.white} />
         </TouchableOpacity>
       )}
+
+      {/* Shift Modal */}
+      <ShiftModal
+        visible={showShiftModal}
+        onClose={() => setShowShiftModal(false)}
+        onSuccess={handleShiftSuccess}
+      />
     </SafeAreaView>
   );
 }

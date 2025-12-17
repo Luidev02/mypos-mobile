@@ -13,8 +13,10 @@ export const Colors = {
   
   // Estados
   success: '#22C55E',
+  successLight: '#D1FAE5',
   error: '#EF4444',
   warning: '#F59E0B',
+  warningLight: '#FEF3C7',
   info: '#3B82F6',
   
   // UI
