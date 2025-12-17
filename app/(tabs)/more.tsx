@@ -36,34 +36,70 @@ export default function MoreScreen() {
 
   const menuItems = [
     {
+      icon: 'apps-outline',
+      title: 'Hub Principal',
+      subtitle: 'Ver todos los módulos',
+      onPress: () => router.push('/hub'),
+    },
+    {
       icon: 'person-outline',
       title: 'Mi Perfil',
       subtitle: 'Ver y editar información personal',
-      onPress: () => Alert.alert('Próximamente', 'Función en desarrollo'),
+      onPress: () => router.push('/profile'),
+    },
+    {
+      icon: 'grid-outline',
+      title: 'Categorías',
+      subtitle: 'Gestionar categorías de productos',
+      onPress: () => router.push('/categories'),
+    },
+    {
+      icon: 'pricetag-outline',
+      title: 'Productos',
+      subtitle: 'Catálogo de productos',
+      onPress: () => router.push('/products'),
     },
     {
       icon: 'people-outline',
       title: 'Clientes',
-      subtitle: 'Gestionar clientes',
-      onPress: () => Alert.alert('Próximamente', 'Función en desarrollo'),
+      subtitle: 'Directorio de clientes',
+      onPress: () => router.push('/customers'),
+    },
+    {
+      icon: 'receipt-outline',
+      title: 'Ventas',
+      subtitle: 'Historial de ventas',
+      onPress: () => router.push('/sales'),
+    },
+    {
+      icon: 'business-outline',
+      title: 'Bodegas',
+      subtitle: 'Gestionar almacenes',
+      onPress: () => router.push('/warehouses'),
+    },
+    {
+      icon: 'calculator-outline',
+      title: 'Impuestos',
+      subtitle: 'Configuración de impuestos',
+      onPress: () => router.push('/taxes'),
+    },
+    {
+      icon: 'gift-outline',
+      title: 'Cupones',
+      subtitle: 'Códigos promocionales',
+      onPress: () => router.push('/coupons'),
+    },
+    {
+      icon: 'bag-handle-outline',
+      title: 'Compras',
+      subtitle: 'Registro de compras',
+      onPress: () => router.push('/purchases'),
     },
     {
       icon: 'settings-outline',
-      title: 'Configuración',
-      subtitle: 'Ajustes de la aplicación',
-      onPress: () => Alert.alert('Próximamente', 'Función en desarrollo'),
-    },
-    {
-      icon: 'print-outline',
-      title: 'Impresora',
-      subtitle: 'Configurar impresora térmica',
-      onPress: () => Alert.alert('Próximamente', 'Función en desarrollo'),
-    },
-    {
-      icon: 'help-circle-outline',
-      title: 'Ayuda y Soporte',
-      subtitle: 'Obtener ayuda',
-      onPress: () => Alert.alert('Próximamente', 'Función en desarrollo'),
+      title: 'Configuración de Empresa',
+      subtitle: 'Ajustes y configuración',
+      onPress: () => router.push('/company'),
     },
     {
       icon: 'information-circle-outline',

@@ -1,0 +1,39 @@
+import { Colors } from '@/constants/theme';
+import React from 'react';
+import { SafeAreaView, StyleSheet, Text, View } from 'react-native';
+
+export default function SalesScreen() {
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Historial de Ventas</Text>
+      </View>
+      <View style={styles.content}>
+        <Text>Historial de ventas - En desarrollo</Text>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  header: {
+    padding: 20,
+    backgroundColor: Colors.white,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: Colors.text,
+  },
+  content: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+});

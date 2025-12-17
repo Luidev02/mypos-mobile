@@ -13,11 +13,12 @@ import type {
     OpenShiftRequest,
     PauseOrderRequest,
     Product,
+    ReportFilters,
     Sale,
     SalesReport,
     Shift,
     TopProduct,
-    User,
+    User
 } from '@/types';
 import { apiService } from './api';
 import { storageService } from './storage';
@@ -282,6 +283,17 @@ class ReportService {
     );
     return response.data;
   }
+
+  async getReport(type: string, filters?: ReportFilters): Promise<any> {
+    const params = new URLSearchParams();
+    if (filters?.start_date) params.append('start_date', filters.start_date);
+    if (filters?.end_date) params.append('end_date', filters.end_date);
+    if (filters?.group_by) params.append('group_by', filters.group_by);
+    
+    const endpoint = `/api/reports/${type}?${params.toString()}`;
+    const response = await apiService.getToken<{ data: any; summary?: any }>(endpoint);
+    return response;
+  }
 }
 
 export const authService = new AuthService();
@@ -289,3 +301,6 @@ export const posService = new POSService();
 export const productService = new ProductService();
 export const inventoryService = new InventoryService();
 export const reportService = new ReportService();
+
+// Export extended services
+export * from './extended';

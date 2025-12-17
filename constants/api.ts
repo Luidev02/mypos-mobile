@@ -64,16 +64,76 @@ export const ENDPOINTS = {
     SEARCH: '/api/pos/customers/search',
   },
 
+  // Categories
+  CATEGORIES: {
+    LIST: '/api/categories',
+    DETAIL: (id: number) => `/api/categories/${id}`,
+    CREATE: '/api/categories',
+    UPDATE: (id: number) => `/api/categories/${id}`,
+    DELETE: (id: number) => `/api/categories/${id}`,
+  },
+
   // Coupons
   COUPONS: {
+    LIST: '/api/coupons',
+    DETAIL: (id: number) => `/api/coupons/${id}`,
     VALIDATE: (code: string) => `/api/coupons/${code}`,
+    CREATE: '/api/coupons',
+    UPDATE: (id: number) => `/api/coupons/${id}`,
+    DELETE: (id: number) => `/api/coupons/${id}`,
+  },
+
+  // Sales
+  SALES: {
+    LIST: '/api/sales',
+    DETAIL: (id: number) => `/api/sales/${id}`,
+  },
+
+  // Warehouses
+  WAREHOUSES: {
+    LIST: '/api/warehouses',
+    DETAIL: (id: number) => `/api/warehouses/${id}`,
+    CREATE: '/api/warehouses',
+    UPDATE: (id: number) => `/api/warehouses/${id}`,
+    DELETE: (id: number) => `/api/warehouses/${id}`,
+    STOCK: (id: number) => `/api/inventory/warehouse/${id}/stock`,
+  },
+
+  // Taxes
+  TAXES: {
+    LIST: '/api/taxes',
+    DETAIL: (id: number) => `/api/taxes/${id}`,
+    CREATE: '/api/taxes',
+    UPDATE: (id: number) => `/api/taxes/${id}`,
+    DELETE: (id: number) => `/api/taxes/${id}`,
+  },
+
+  // Purchases
+  PURCHASES: {
+    LIST: '/api/purchases',
+    DETAIL: (id: number) => `/api/purchases/${id}`,
+    CREATE: '/api/purchases',
+    UPDATE: (id: number) => `/api/purchases/${id}`,
+    DELETE: (id: number) => `/api/purchases/${id}`,
   },
 
   // Reports
   REPORTS: {
     SALES: '/api/reports/sales',
+    PRODUCTS: '/api/reports/products',
+    INVENTORY: '/api/reports/inventory',
+    CUSTOMERS: '/api/reports/customers',
+    FINANCIAL: '/api/reports/financial',
+    TAXES: '/api/reports/taxes',
     TOP_PRODUCTS: '/api/reports/top-products',
     REVENUE: '/api/reports/revenue',
+  },
+
+  // Profile
+  PROFILE: {
+    GET: '/api/profile',
+    UPDATE: '/api/profile',
+    CHANGE_PASSWORD: '/api/profile/change-password',
   },
 
   // Company
@@ -82,9 +142,34 @@ export const ENDPOINTS = {
     UPDATE: '/api/company',
   },
 
+  // Roles
+  ROLES: {
+    LIST: '/api/roles',
+    DETAIL: (id: number) => `/api/roles/${id}`,
+    CREATE: '/api/roles',
+    UPDATE: (id: number) => `/api/roles/${id}`,
+    DELETE: (id: number) => `/api/roles/${id}`,
+  },
+
   // Users
   USERS: {
     LIST: '/api/users',
+    DETAIL: (id: number) => `/api/users/${id}`,
+    CREATE: '/api/users',
+    UPDATE: (id: number) => `/api/users/${id}`,
+    DELETE: (id: number) => `/api/users/${id}`,
     HUB: '/api/hub',
+  },
+
+  // Integrations
+  INTEGRATIONS: {
+    LIST: '/api/integrations',
+    DETAIL: (id: number) => `/api/integrations/${id}`,
+    CREATE: '/api/integrations',
+    UPDATE: (id: number) => `/api/integrations/${id}`,
+    DELETE: (id: number) => `/api/integrations/${id}`,
+    TEST: (id: number) => `/api/integrations/${id}/test`,
+    LOGS: (id: number) => `/api/integrations/${id}/logs`,
+    STATS: (id: number) => `/api/integrations/${id}/stats`,
   },
 };
