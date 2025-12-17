@@ -2,7 +2,7 @@ import { BorderRadius, Colors, FontSize, FontWeight, Shadow, Spacing } from '@/c
 import { useCart } from '@/contexts/CartContext';
 import { posService } from '@/services';
 import type { CartItem, CreateSaleRequest } from '@/types';
-import { formatCurrency, calculateTax, calculateTotal } from '@/utils/helpers';
+import { calculateTax, calculateTotal, formatCurrency } from '@/utils/helpers';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
