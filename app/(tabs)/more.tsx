@@ -76,7 +76,14 @@ export default function MoreScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
+        <TouchableOpacity 
+          onPress={() => router.replace('/hub')}
+          style={styles.backButton}
+        >
+          <Ionicons name="arrow-back" size={24} color={Colors.text} />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Más</Text>
+        <View style={{ width: 24 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -132,7 +139,13 @@ const styles = StyleSheet.create({
   header: {
     padding: Spacing.lg,
     backgroundColor: Colors.white,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     ...Shadow.sm,
+  },
+  backButton: {
+    marginRight: Spacing.sm,
   },
   headerTitle: {
     fontSize: FontSize.xl,

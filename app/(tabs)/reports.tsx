@@ -3,6 +3,7 @@ import { reportService } from '@/services';
 import type { SalesReport, TopProduct } from '@/types';
 import { formatCurrency } from '@/utils/helpers';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
@@ -64,8 +65,16 @@ export default function ReportsScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Reportes</Text>
-        <Text style={styles.headerSubtitle}>Ventas del día</Text>
+        <TouchableOpacity 
+          onPress={() => router.push('/hub')}
+          style={styles.backButton}
+        >
+          <Ionicons name="arrow-back" size={24} color={Colors.text} />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.headerTitle}>Reportes</Text>
+          <Text style={styles.headerSubtitle}>Ventas del día</Text>
+        </View>
       </View>
 
       <ScrollView
@@ -134,7 +143,12 @@ const styles = StyleSheet.create({
   header: {
     padding: Spacing.lg,
     backgroundColor: Colors.white,
+    flexDirection: 'row',
+    alignItems: 'center',
     ...Shadow.sm,
+  },
+  backButton: {
+    marginRight: Spacing.md,
   },
   headerTitle: {
     fontSize: FontSize.xl,

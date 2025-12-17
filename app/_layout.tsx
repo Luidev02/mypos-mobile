@@ -1,5 +1,6 @@
 import { AuthProvider } from '@/contexts/AuthContext';
 import { CartProvider } from '@/contexts/CartContext';
+import '@/utils/suppressWarnings';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
@@ -52,7 +53,17 @@ function RootLayoutNav() {
         <CartProvider>
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="login" options={{ headerShown: false }} />
+            <Stack.Screen name="hub" options={{ headerShown: false }} />
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="cart" options={{ headerShown: false }} />
+            <Stack.Screen name="products" options={{ headerShown: false }} />
+            <Stack.Screen name="categories" options={{ headerShown: false }} />
+            <Stack.Screen name="customers" options={{ headerShown: false }} />
+            <Stack.Screen name="shifts" options={{ headerShown: false }} />
+            <Stack.Screen name="sales" options={{ headerShown: false }} />
+            <Stack.Screen name="coupons" options={{ headerShown: false }} />
+            <Stack.Screen name="taxes" options={{ headerShown: false }} />
+            <Stack.Screen name="company" options={{ headerShown: false }} />
             <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
           </Stack>
         </CartProvider>

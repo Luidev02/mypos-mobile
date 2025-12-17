@@ -3,6 +3,7 @@ import { inventoryService } from '@/services';
 import type { InventoryItem } from '@/types';
 import { formatCurrency, getStockColor } from '@/utils/helpers';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
@@ -76,6 +77,12 @@ export default function InventoryScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
+        <TouchableOpacity 
+          onPress={() => router.push('/hub')}
+          style={styles.backButton}
+        >
+          <Ionicons name="arrow-back" size={24} color={Colors.text} />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Inventario</Text>
         <TouchableOpacity style={styles.addButton}>
           <Ionicons name="add-circle-outline" size={24} color={Colors.primary} />
@@ -143,6 +150,9 @@ const styles = StyleSheet.create({
     padding: Spacing.lg,
     backgroundColor: Colors.white,
     ...Shadow.sm,
+  },
+  backButton: {
+    marginRight: Spacing.md,
   },
   headerTitle: {
     fontSize: FontSize.xl,

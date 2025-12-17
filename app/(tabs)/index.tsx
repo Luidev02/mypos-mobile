@@ -10,8 +10,10 @@ import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
+    Dimensions,
     FlatList,
     RefreshControl,
+    ScrollView,
     StyleSheet,
     Text,
     TextInput,
@@ -20,9 +22,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+const { width: screenWidth } = Dimensions.get('window');
+const isTablet = screenWidth >= 768;
+
 export default function POSScreen() {
   const { user } = useAuth();
-  const { items, totalItems, subtotal, addItem } = useCart();
+  const { items, totalItems, subtotal, addItem, removeItem, updateQuantity, clearCart } = useCart();
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -31,6 +36,12 @@ export default function POSScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [shift, setShift] = useState<Shift | null>(null);
+  const [customer, setCustomer] = useState('Consumidor Final');
+  const [orderType, setOrderType] = useState('Sin tipo');
+
+  // Calculate tax and total
+  const tax = subtotal * 0.19; // 19% IVA
+  const total = subtotal + tax;
 
   useEffect(() => {
     loadData();
@@ -81,7 +92,30 @@ export default function POSScreen() {
     }
 
     addItem(product);
-    Alert.alert('Producto Agregado', `${product.name} agregado al carrito`);
+  };
+
+  const handlePay = () => {
+    if (items.length === 0) {
+      Alert.alert('Carrito Vacío', 'Agregue productos antes de pagar');
+      return;
+    }
+    router.push('/cart');
+  };
+
+  const handlePause = () => {
+    Alert.alert('Pausar Venta', 'Esta función estará disponible pronto');
+  };
+
+  const handleClear = () => {
+    if (items.length === 0) return;
+    Alert.alert(
+      'Limpiar Carrito',
+      '¿Está seguro de eliminar todos los productos?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Limpiar', style: 'destructive', onPress: clearCart },
+      ]
+    );
   };
 
   const filteredProducts = products.filter((product) =>
@@ -140,49 +174,120 @@ export default function POSScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Header */}
       <View style={styles.header}>
-        <View>
+        <TouchableOpacity 
+          onPress={() => router.push('/hub')}
+          style={styles.backButton}
+        >
+          <Ionicons name="arrow-back" size={24} color={Colors.white} />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Punto de Venta</Text>
-          <Text style={styles.headerSubtitle}>{user?.username} - {user?.company_name}</Text>
         </View>
-        {!shift && (
-          <TouchableOpacity style={styles.shiftButton}>
-            <Ionicons name="time-outline" size={20} color={Colors.white} />
-            <Text style={styles.shiftButtonText}>Abrir Turno</Text>
-          </TouchableOpacity>
-        )}
       </View>
 
+      {/* Top Action Buttons - Compact */}
+      <ScrollView 
+        horizontal 
+        showsHorizontalScrollIndicator={false}
+        style={styles.topActionsScroll}
+        contentContainerStyle={styles.topActions}
+      >
+        <TouchableOpacity 
+          style={[styles.actionButton, !shift && styles.actionButtonWarning]}
+          onPress={() => Alert.alert('Turnos', 'Gestión de turnos disponible pronto')}
+        >
+          <Ionicons name="time-outline" size={16} color={Colors.white} />
+          <Text style={styles.actionButtonText}>{shift ? 'Turno' : 'Sin Turno'}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.actionButton}
+          onPress={() => Alert.alert('Órdenes', 'Gestión de órdenes disponible pronto')}
+        >
+          <Ionicons name="receipt-outline" size={16} color={Colors.white} />
+          <Text style={styles.actionButtonText}>Órdenes</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.actionButton}
+          onPress={() => Alert.alert('Tipo de Orden', 'Selección de tipo disponible pronto')}
+        >
+          <Ionicons name="document-text-outline" size={16} color={Colors.white} />
+          <Text style={styles.actionButtonText}>{orderType}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.actionButton}
+          onPress={() => Alert.alert('Cliente', 'Selección de cliente disponible pronto')}
+        >
+          <Ionicons name="person-outline" size={16} color={Colors.white} />
+          <Text style={styles.actionButtonText} numberOfLines={1}>{customer}</Text>
+        </TouchableOpacity>
+      </ScrollView>
+
+      {/* Quick Actions Row */}
+      <View style={styles.quickActions}>
+        <TouchableOpacity 
+          style={styles.quickActionButton}
+          onPress={() => Alert.alert('Cupones', 'Disponible pronto')}
+        >
+          <Ionicons name="pricetag-outline" size={18} color={Colors.primary} />
+          <Text style={styles.quickActionText}>Cupones</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={styles.quickActionButton}
+          onPress={() => Alert.alert('Ajustes', 'Disponible pronto')}
+        >
+          <Ionicons name="settings-outline" size={18} color={Colors.primary} />
+          <Text style={styles.quickActionText}>Ajustes</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={styles.quickActionButton}
+          onPress={() => Alert.alert('Calculadora', 'Disponible pronto')}
+        >
+          <Ionicons name="calculator-outline" size={18} color={Colors.primary} />
+          <Text style={styles.quickActionText}>Calculadora</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Search */}
       <View style={styles.searchContainer}>
         <Ionicons name="search" size={20} color={Colors.textLight} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Buscar productos..."
+          placeholder="Buscar producto..."
           placeholderTextColor={Colors.textLight}
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
-        <TouchableOpacity>
+        <TouchableOpacity style={styles.iconButton}>
           <Ionicons name="barcode-outline" size={24} color={Colors.primary} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.iconButton}>
+          <Ionicons name="qr-code-outline" size={24} color={Colors.primary} />
         </TouchableOpacity>
       </View>
 
-      <View style={styles.categoriesContainer}>
-        <FlatList
-          horizontal
-          data={categories}
-          renderItem={renderCategoryItem}
-          keyExtractor={(item) => item.id.toString()}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoriesList}
-        />
-      </View>
+      {/* Categories */}
+      <FlatList
+        horizontal
+        data={categories}
+        renderItem={renderCategoryItem}
+        keyExtractor={(item) => item.id.toString()}
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.categoriesList}
+        style={styles.categoriesContainer}
+      />
 
+      {/* Products Grid */}
       <FlatList
         data={filteredProducts}
         renderItem={renderProductItem}
         keyExtractor={(item) => item.id.toString()}
-        numColumns={2}
+        numColumns={isTablet ? 3 : 2}
+        key={isTablet ? 'tablet' : 'mobile'}
         contentContainerStyle={styles.productsList}
         refreshControl={
           <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
@@ -195,19 +300,23 @@ export default function POSScreen() {
         }
       />
 
+      {/* Floating Cart Button */}
       {totalItems > 0 && (
         <TouchableOpacity 
-          style={styles.cartPreview}
+          style={styles.cartFloating}
           onPress={() => router.push('/cart')}
         >
-          <View style={styles.cartInfo}>
-            <Text style={styles.cartItems}>{totalItems} items</Text>
-            <Text style={styles.cartTotal}>{formatCurrency(subtotal)}</Text>
+          <View style={styles.cartFloatingContent}>
+            <View style={styles.cartBadge}>
+              <Text style={styles.cartBadgeText}>{totalItems}</Text>
+            </View>
+            <Ionicons name="cart" size={24} color={Colors.white} />
+            <View style={styles.cartFloatingInfo}>
+              <Text style={styles.cartFloatingLabel}>Ver Carrito</Text>
+              <Text style={styles.cartFloatingTotal}>{formatCurrency(total)}</Text>
+            </View>
           </View>
-          <View style={styles.cartButton}>
-            <Text style={styles.cartButtonText}>Ver Carrito</Text>
-            <Ionicons name="arrow-forward" size={20} color={Colors.white} />
-          </View>
+          <Ionicons name="chevron-forward" size={24} color={Colors.white} />
         </TouchableOpacity>
       )}
     </SafeAreaView>
@@ -227,44 +336,84 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: Spacing.lg,
-    backgroundColor: Colors.white,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
+    backgroundColor: Colors.primary,
     ...Shadow.sm,
+  },
+  backButton: {
+    marginRight: Spacing.md,
+    padding: Spacing.xs,
   },
   headerTitle: {
     fontSize: FontSize.xl,
     fontWeight: FontWeight.bold,
-    color: Colors.text,
+    color: Colors.white,
   },
-  headerSubtitle: {
-    fontSize: FontSize.sm,
-    color: Colors.textLight,
-    marginTop: Spacing.xs,
+  topActionsScroll: {
+    backgroundColor: Colors.white,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
   },
-  shiftButton: {
+  topActions: {
+    flexDirection: 'row',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    gap: Spacing.sm,
+  },
+  actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.warning,
-    paddingHorizontal: Spacing.md,
+    backgroundColor: Colors.primary,
     paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
     borderRadius: BorderRadius.md,
     gap: Spacing.xs,
   },
-  shiftButtonText: {
+  actionButtonWarning: {
+    backgroundColor: Colors.warning,
+  },
+  actionButtonText: {
     color: Colors.white,
-    fontSize: FontSize.sm,
+    fontSize: FontSize.xs,
     fontWeight: FontWeight.semibold,
+  },
+  quickActions: {
+    flexDirection: 'row',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    backgroundColor: Colors.white,
+    gap: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  quickActionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.background,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.xs,
+    borderRadius: BorderRadius.md,
+    gap: Spacing.xs,
+  },
+  quickActionText: {
+    fontSize: FontSize.xs,
+    color: Colors.text,
+    fontWeight: FontWeight.medium,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.white,
-    margin: Spacing.md,
+    marginHorizontal: Spacing.md,
+    marginVertical: Spacing.sm,
     paddingHorizontal: Spacing.md,
     borderRadius: BorderRadius.md,
-    ...Shadow.sm,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   searchInput: {
     flex: 1,
@@ -273,49 +422,60 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md,
     color: Colors.text,
   },
+  iconButton: {
+    padding: Spacing.xs,
+    marginLeft: Spacing.xs,
+  },
   categoriesContainer: {
     backgroundColor: Colors.white,
-    paddingVertical: Spacing.sm,
-    ...Shadow.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
   },
   categoriesList: {
     paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
     gap: Spacing.sm,
   },
   categoryCard: {
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.full,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
     backgroundColor: Colors.background,
     marginRight: Spacing.sm,
+    minWidth: 100,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
   categoryCardSelected: {
     backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
   },
   categoryText: {
-    fontSize: FontSize.md,
-    fontWeight: FontWeight.medium,
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
     color: Colors.text,
   },
   categoryTextSelected: {
     color: Colors.white,
   },
   productsList: {
-    padding: Spacing.md,
-    gap: Spacing.md,
+    padding: Spacing.sm,
+    paddingBottom: 100,
   },
   productCard: {
     flex: 1,
-    maxWidth: '48%',
     backgroundColor: Colors.white,
     borderRadius: BorderRadius.md,
     padding: Spacing.md,
     margin: Spacing.xs,
+    minWidth: isTablet ? 150 : 160,
+    maxWidth: isTablet ? 200 : 180,
     ...Shadow.sm,
   },
   productImagePlaceholder: {
     width: '100%',
-    height: 100,
+    height: isTablet ? 100 : 80,
     backgroundColor: Colors.background,
     borderRadius: BorderRadius.md,
     alignItems: 'center',
@@ -326,65 +486,73 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
   },
   productName: {
-    fontSize: FontSize.md,
+    fontSize: FontSize.sm,
     fontWeight: FontWeight.medium,
     color: Colors.text,
+    minHeight: 36,
   },
   productPrice: {
-    fontSize: FontSize.lg,
+    fontSize: FontSize.md,
     fontWeight: FontWeight.bold,
     color: Colors.primary,
   },
   productStock: {
-    fontSize: FontSize.sm,
-    color: Colors.success,
-  },
-  productStockLow: {
-    color: Colors.warning,
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.medium,
   },
   emptyContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: Spacing.xxl,
+    paddingTop: Spacing.xxl * 2,
   },
   emptyText: {
     fontSize: FontSize.md,
     color: Colors.textLight,
     marginTop: Spacing.md,
   },
-  cartPreview: {
+  cartFloating: {
+    position: 'absolute',
+    bottom: Spacing.md,
+    left: Spacing.md,
+    right: Spacing.md,
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: Colors.white,
-    padding: Spacing.md,
     ...Shadow.lg,
   },
-  cartInfo: {
-    gap: Spacing.xs,
-  },
-  cartItems: {
-    fontSize: FontSize.sm,
-    color: Colors.textLight,
-  },
-  cartTotal: {
-    fontSize: FontSize.xl,
-    fontWeight: FontWeight.bold,
-    color: Colors.text,
-  },
-  cartButton: {
+  cartFloatingContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.primary,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.md,
-    gap: Spacing.sm,
+    gap: Spacing.md,
   },
-  cartButtonText: {
+  cartBadge: {
+    backgroundColor: Colors.white,
+    borderRadius: BorderRadius.full,
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cartBadgeText: {
+    color: Colors.primary,
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.bold,
+  },
+  cartFloatingInfo: {
+    gap: Spacing.xs,
+  },
+  cartFloatingLabel: {
     color: Colors.white,
-    fontSize: FontSize.md,
-    fontWeight: FontWeight.semibold,
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.medium,
+  },
+  cartFloatingTotal: {
+    color: Colors.white,
+    fontSize: FontSize.lg,
+    fontWeight: FontWeight.bold,
   },
 });

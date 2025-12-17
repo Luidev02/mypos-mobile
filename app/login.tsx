@@ -32,7 +32,7 @@ export default function LoginScreen() {
     setIsLoading(true);
     try {
       await login(username.trim(), password);
-      router.replace('/(tabs)');
+      router.replace('/hub');
     } catch (error: any) {
       Alert.alert(
         'Error de Autenticación',
