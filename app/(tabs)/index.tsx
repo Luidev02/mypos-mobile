@@ -1,3 +1,4 @@
+import BarcodeScanner from '@/components/BarcodeScanner';
 import CalculatorModal from '@/components/CalculatorModal';
 import CloseShiftModal from '@/components/CloseShiftModal';
 import CouponModal from '@/components/CouponModal';
@@ -70,6 +71,7 @@ export default function POSScreen() {
   const [showCouponModal, setShowCouponModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showCalculatorModal, setShowCalculatorModal] = useState(false);
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
 
   // Calculate tax and total
   const tax = subtotal * 0.19; // 19% IVA
@@ -165,6 +167,30 @@ export default function POSScreen() {
     }
 
     addItem(product);
+  };
+
+  const handleBarcodeScanned = async (barcode: string) => {
+    try {
+      // Buscar producto por código de barras
+      const results = await posService.searchProducts(barcode);
+      
+      if (results.length === 0) {
+        Alert.alert('Producto No Encontrado', `No se encontró ningún producto con el código: ${barcode}`);
+        return;
+      }
+
+      // Si se encuentra exactamente un producto, agregarlo al carrito
+      if (results.length === 1) {
+        handleProductPress(results[0]);
+      } else {
+        // Si hay múltiples resultados, mostrarlos en la lista
+        setProducts(results);
+        setSelectedCategory(null);
+        Alert.alert('Productos Encontrados', `Se encontraron ${results.length} productos`);
+      }
+    } catch (error: any) {
+      Alert.alert('Error', 'No se pudo buscar el producto');
+    }
   };
 
   const handleShiftSuccess = async () => {
@@ -432,10 +458,10 @@ export default function POSScreen() {
         {isSearching && <ActivityIndicator size="small" color={Colors.primary} style={styles.iconButton} />}
         {!isSearching && (
           <>
-            <TouchableOpacity style={styles.iconButton}>
+            <TouchableOpacity style={styles.iconButton} onPress={() => setShowBarcodeScanner(true)}>
               <Ionicons name="barcode-outline" size={24} color={Colors.primary} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.iconButton}>
+            <TouchableOpacity style={styles.iconButton} onPress={() => setShowBarcodeScanner(true)}>
               <Ionicons name="qr-code-outline" size={24} color={Colors.primary} />
             </TouchableOpacity>
           </>
@@ -578,6 +604,14 @@ export default function POSScreen() {
       <CalculatorModal
         visible={showCalculatorModal}
         onClose={() => setShowCalculatorModal(false)}
+      />
+
+      {/* Barcode Scanner */}
+      <BarcodeScanner
+        visible={showBarcodeScanner}
+        onClose={() => setShowBarcodeScanner(false)}
+        onBarcodeScanned={handleBarcodeScanned}
+        title="Escanear Código"
       />
     </SafeAreaView>
   );
