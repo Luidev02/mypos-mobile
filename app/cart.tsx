@@ -1,9 +1,10 @@
 import { BorderRadius, Colors, FontSize, FontWeight, Shadow, Spacing } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
+import { useSale } from '@/contexts/SaleContext';
 import { posService } from '@/services';
 import type { CartItem, CreateSaleRequest, Shift } from '@/types';
-import { calculateTax, calculateTotal, formatCurrency } from '@/utils/helpers';
+import { calculateTax, formatCurrency } from '@/utils/helpers';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -21,12 +22,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 export default function CartScreen() {
   const { user } = useAuth();
   const { items, subtotal, updateQuantity, removeItem, clearCart } = useCart();
+  const { customer, customerId, orderType, saleName, discount, couponId, couponCode, resetSaleData } = useSale();
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer'>('cash');
   const [amountReceived, setAmountReceived] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [activeShift, setActiveShift] = useState<Shift | null>(null);
   const [isLoadingShift, setIsLoadingShift] = useState(true);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [completedSale, setCompletedSale] = useState<any>(null);
 
   useEffect(() => {
     checkActiveShift();
@@ -50,8 +54,10 @@ export default function CartScreen() {
   };
 
   const TAX_RATE = 0.19; // 19% IVA
-  const tax = calculateTax(subtotal, TAX_RATE);
-  const total = calculateTotal(subtotal, TAX_RATE);
+  const discountAmount = subtotal * (discount / 100);
+  const subtotalAfterDiscount = subtotal - discountAmount;
+  const tax = calculateTax(subtotalAfterDiscount, TAX_RATE);
+  const total = subtotalAfterDiscount + tax;
   const change = paymentMethod === 'cash' ? Math.max(0, parseFloat(amountReceived || '0') - total) : 0;
 
   const handleQuantityChange = (productId: number, delta: number) => {
@@ -105,39 +111,43 @@ export default function CartScreen() {
     try {
       // Estructura exacta del flujo web
       const saleData: CreateSaleRequest = {
-        customer_id: 1, // Consumidor Final (igual que web)
+        customer_id: customerId,
+        customer_name: customer,
+        sale_type: orderType || '',
+        payment_method: paymentMethod,
+        coupon_id: couponId,
+        discount_percentage: discount,
         cash_register_id: activeShift.cash_register_id,
         shift_id: activeShift.id,
         warehouse_id: activeShift.warehouse_id,
-        payment_method: paymentMethod,
-        resolution_id: null, // Para facturación electrónica futura
+        resolution_id: null,
         invoice_number: null,
+        subtotal: subtotal,
+        total: total,
+        amount_received: paymentMethod === 'cash' ? parseFloat(amountReceived || '0') : total,
+        change_amount: paymentMethod === 'cash' ? change : 0,
         items: items.map(item => ({
           product_id: item.product_id,
           quantity: item.quantity,
           price: item.unit_price,
-          tax_rate: 19, // 19% IVA Colombia (igual que web)
+          tax_rate: 19,
           discount: item.discount || 0,
-          is_inventory_managed: true, // Siempre descontar del inventario
+          is_inventory_managed: true,
         })),
       };
 
       const response = await posService.createSale(saleData);
-      const sale = response; // response.data ya viene procesado del service
+      const sale = response;
       
-      Alert.alert(
-        'Venta Exitosa',
-        `${sale.invoice_number || sale.folio || `Venta #${sale.id}`}\nTotal: ${formatCurrency(sale.total || sale.total_amount || 0)}${
-          paymentMethod === 'cash' ? `\nCambio: ${formatCurrency(change)}` : ''
-        }`,
-        [
-          { text: 'OK', onPress: () => {
-            clearCart();
-            setShowPaymentModal(false);
-            router.back();
-          }},
-        ]
-      );
+      setCompletedSale({
+        ...sale,
+        payment_method: paymentMethod,
+        amount_received: paymentMethod === 'cash' ? parseFloat(amountReceived || '0') : total,
+        change_amount: change,
+      });
+      
+      setShowPaymentModal(false);
+      setShowSuccessModal(true);
     } catch (error: any) {
       console.error('Error al procesar venta:', error);
       Alert.alert(
@@ -262,6 +272,14 @@ export default function CartScreen() {
           <Text style={styles.summaryLabel}>Subtotal:</Text>
           <Text style={styles.summaryValue}>{formatCurrency(subtotal)}</Text>
         </View>
+        {discount > 0 && (
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>Descuento ({discount}%):</Text>
+            <Text style={[styles.summaryValue, { color: Colors.success }]}>
+              -{formatCurrency(discountAmount)}
+            </Text>
+          </View>
+        )}
         <View style={styles.summaryRow}>
           <Text style={styles.summaryLabel}>IVA (19%):</Text>
           <Text style={styles.summaryValue}>{formatCurrency(tax)}</Text>
@@ -270,6 +288,24 @@ export default function CartScreen() {
           <Text style={styles.summaryTotalLabel}>Total:</Text>
           <Text style={styles.summaryTotalValue}>{formatCurrency(total)}</Text>
         </View>
+
+        {/* Mostrar info de venta */}
+        {(customer !== 'Consumidor Final' || orderType || saleName) && (
+          <View style={styles.saleInfo}>
+            {customer !== 'Consumidor Final' && (
+              <Text style={styles.saleInfoText}>Cliente: {customer}</Text>
+            )}
+            {orderType && (
+              <Text style={styles.saleInfoText}>Tipo: {orderType}</Text>
+            )}
+            {saleName && (
+              <Text style={styles.saleInfoText}>Venta: {saleName}</Text>
+            )}
+            {couponCode && (
+              <Text style={styles.saleInfoText}>Cupón: {couponCode}</Text>
+            )}
+          </View>
+        )}
 
         <TouchableOpacity 
           style={[styles.checkoutButton, !activeShift && styles.checkoutButtonDisabled]}
@@ -343,11 +379,49 @@ export default function CartScreen() {
                   keyboardType="numeric"
                   value={amountReceived}
                   onChangeText={setAmountReceived}
+                  autoFocus
                 />
-                {parseFloat(amountReceived || '0') >= total && (
-                  <Text style={styles.changeText}>
-                    Cambio: {formatCurrency(change)}
-                  </Text>
+                
+                {/* Botones rápidos - igual que en web */}
+                <View style={styles.quickAmounts}>
+                  <TouchableOpacity
+                    style={styles.quickAmountButton}
+                    onPress={() => setAmountReceived(total.toString())}
+                  >
+                    <Text style={styles.quickAmountText}>Exacto</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.quickAmountButton}
+                    onPress={() => setAmountReceived((Math.ceil(total / 5000) * 5000).toString())}
+                  >
+                    <Text style={styles.quickAmountText}>+5k</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.quickAmountButton}
+                    onPress={() => setAmountReceived((Math.ceil(total / 10000) * 10000).toString())}
+                  >
+                    <Text style={styles.quickAmountText}>+10k</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.quickAmountButton}
+                    onPress={() => setAmountReceived((Math.ceil(total / 20000) * 20000).toString())}
+                  >
+                    <Text style={styles.quickAmountText}>+20k</Text>
+                  </TouchableOpacity>
+                </View>
+                
+                {parseFloat(amountReceived || '0') > 0 && (
+                  <View style={[
+                    styles.changeContainer,
+                    parseFloat(amountReceived || '0') >= total ? styles.changePositive : styles.changeNegative
+                  ]}>
+                    <Text style={styles.changeLabel}>
+                      {parseFloat(amountReceived || '0') >= total ? 'Vuelto a Entregar' : 'Falta'}
+                    </Text>
+                    <Text style={styles.changeAmount}>
+                      {formatCurrency(Math.abs(parseFloat(amountReceived || '0') - total))}
+                    </Text>
+                  </View>
                 )}
               </>
             )}
@@ -367,6 +441,73 @@ export default function CartScreen() {
                 <Text style={styles.modalButtonConfirmText}>
                   {isProcessing ? 'Procesando...' : 'Confirmar'}
                 </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Modal de Éxito */}
+      {showSuccessModal && completedSale && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.successModalContent}>
+            <View style={styles.successIcon}>
+              <Ionicons name="checkmark-circle" size={80} color={Colors.success} />
+            </View>
+            
+            <Text style={styles.successTitle}>¡Venta Exitosa!</Text>
+            
+            <View style={styles.successInfo}>
+              <View style={styles.successRow}>
+                <Text style={styles.successLabel}>Factura:</Text>
+                <Text style={styles.successValue}>
+                  {completedSale.invoice_number || completedSale.folio || `Venta #${completedSale.id}`}
+                </Text>
+              </View>
+              
+              <View style={styles.successRow}>
+                <Text style={styles.successLabel}>Total Pagado:</Text>
+                <Text style={styles.successTotal}>
+                  {formatCurrency(completedSale.total || completedSale.total_amount || 0)}
+                </Text>
+              </View>
+              
+              {completedSale.payment_method === 'cash' && (
+                <>
+                  <View style={styles.successRow}>
+                    <Text style={styles.successLabel}>Recibido:</Text>
+                    <Text style={styles.successValue}>
+                      {formatCurrency(completedSale.amount_received)}
+                    </Text>
+                  </View>
+                  <View style={styles.successRow}>
+                    <Text style={styles.successLabel}>Vuelto:</Text>
+                    <Text style={[styles.successValue, { color: Colors.success, fontSize: FontSize.xl }]}>
+                      {formatCurrency(completedSale.change_amount)}
+                    </Text>
+                  </View>
+                </>
+              )}
+              
+              <View style={styles.successRow}>
+                <Text style={styles.successLabel}>Método:</Text>
+                <Text style={styles.successValue}>
+                  {completedSale.payment_method === 'cash' ? 'Efectivo' : 'Transferencia'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.successButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() => {
+                  setShowSuccessModal(false);
+                  clearCart();
+                  resetSaleData();
+                  router.back();
+                }}
+              >
+                <Text style={styles.modalButtonCancelText}>Cerrar</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -622,5 +763,100 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md,
     fontWeight: FontWeight.semibold,
     color: Colors.white,
+  },
+  saleInfo: {
+    backgroundColor: Colors.successLight,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    gap: Spacing.xs,
+  },
+  saleInfoText: {
+    fontSize: FontSize.sm,
+    color: Colors.text,
+  },
+  quickAmounts: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  quickAmountButton: {
+    flex: 1,
+    padding: Spacing.sm,
+    backgroundColor: Colors.background,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+  },
+  quickAmountText: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.medium,
+    color: Colors.primary,
+  },
+  changeContainer: {
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+  },
+  changePositive: {
+    backgroundColor: Colors.successLight,
+  },
+  changeNegative: {
+    backgroundColor: Colors.warningLight,
+  },
+  changeLabel: {
+    fontSize: FontSize.sm,
+    color: Colors.textLight,
+  },
+  changeAmount: {
+    fontSize: FontSize.xxl,
+    fontWeight: FontWeight.bold,
+    color: Colors.text,
+    marginTop: Spacing.xs,
+  },
+  successModalContent: {
+    backgroundColor: Colors.white,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.xl,
+    gap: Spacing.lg,
+    maxWidth: 400,
+    width: '100%',
+  },
+  successIcon: {
+    alignItems: 'center',
+  },
+  successTitle: {
+    fontSize: FontSize.xxl,
+    fontWeight: FontWeight.bold,
+    color: Colors.text,
+    textAlign: 'center',
+  },
+  successInfo: {
+    backgroundColor: Colors.background,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    gap: Spacing.sm,
+  },
+  successRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  successLabel: {
+    fontSize: FontSize.md,
+    color: Colors.textLight,
+  },
+  successValue: {
+    fontSize: FontSize.md,
+    fontWeight: FontWeight.medium,
+    color: Colors.text,
+  },
+  successTotal: {
+    fontSize: FontSize.xl,
+    fontWeight: FontWeight.bold,
+    color: Colors.text,
+  },
+  successButtons: {
+    flexDirection: 'row',
+    gap: Spacing.md,
   },
 });

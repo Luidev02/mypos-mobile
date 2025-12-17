@@ -23,6 +23,8 @@ export const ENDPOINTS = {
     SALES: '/api/pos/sales',
     ORDERS_RECENT: '/api/pos/orders/recent',
     ORDER_DETAIL: (id: number) => `/api/pos/orders/${id}`,
+    ORDER_PAUSE: '/api/pos/orders/pause',
+    ORDER_DELETE: (id: number) => `/api/pos/orders/${id}`,
     SHIFTS: {
       ACTIVE: '/api/pos/shifts/active',
       OPEN: '/api/pos/shifts/open',
@@ -59,6 +61,12 @@ export const ENDPOINTS = {
     DETAIL: (id: number) => `/api/customers/${id}`,
     CREATE: '/api/customers',
     UPDATE: (id: number) => `/api/customers/${id}`,
+    SEARCH: '/api/pos/customers/search',
+  },
+
+  // Coupons
+  COUPONS: {
+    VALIDATE: (code: string) => `/api/coupons/${code}`,
   },
 
   // Reports

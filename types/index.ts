@@ -48,11 +48,57 @@ export interface Customer {
   id: number;
   name: string;
   nit?: string;
+  identification?: string; // Alias de nit
+  identification_type?: 'CC' | 'NIT' | 'CE' | 'TI';
   email?: string;
   phone?: string;
   address?: string;
   city?: string;
   is_active: boolean;
+}
+
+export interface CreateCustomerRequest {
+  name: string;
+  identification: string;
+  identification_type?: 'CC' | 'NIT' | 'CE' | 'TI';
+  phone?: string;
+  email?: string;
+  address?: string;
+  city?: string;
+}
+
+// Coupon Types
+export interface Coupon {
+  id: number;
+  code: string;
+  name?: string;
+  description?: string;
+  discount: number; // Porcentaje o valor fijo
+  discount_type?: 'percentage' | 'fixed';
+  is_active: boolean;
+  valid_until?: string;
+  usage_limit?: number;
+  current_usage?: number;
+}
+
+// Pause Order Types
+export interface PauseOrderRequest {
+  customer_id: number;
+  customer_name: string;
+  order_number: string;
+  sale_type?: string;
+  coupon_id?: number | null;
+  discount_percentage: number;
+  subtotal: number;
+  discount: number;
+  tax_total: number;
+  total: number;
+  products: {
+    id: number;
+    price: number;
+    quantity: number;
+    discount: number;
+  }[];
 }
 
 // Cart Types
@@ -77,12 +123,20 @@ export interface SaleItem {
 
 export interface CreateSaleRequest {
   customer_id: number;
+  customer_name?: string;
+  sale_type?: string; // carry, delivery, dine_in
   cash_register_id: number; // Requerido - ID de la caja registradora
   shift_id: number; // Requerido - ID del turno activo
   warehouse_id: number; // Requerido - ID de la bodega (viene del turno)
   payment_method: 'cash' | 'transfer';
+  coupon_id?: number | null;
+  discount_percentage?: number;
   resolution_id?: number | null; // Opcional - Para facturación electrónica
   invoice_number?: string | null; // Opcional - Número de factura
+  subtotal?: number;
+  total?: number;
+  amount_received?: number;
+  change_amount?: number;
   items: SaleItem[];
 }
 

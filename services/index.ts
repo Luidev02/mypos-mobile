@@ -3,12 +3,15 @@ import type {
     CashRegister,
     Category,
     CloseShiftRequest,
+    Coupon,
+    CreateCustomerRequest,
     CreateSaleRequest,
     Customer,
     InventoryItem,
     LoginRequest,
     LoginResponse,
     OpenShiftRequest,
+    PauseOrderRequest,
     Product,
     Sale,
     SalesReport,
@@ -186,6 +189,40 @@ class POSService {
       ENDPOINTS.POS.CASH_REGISTERS
     );
     return Array.isArray(response) ? response : response.data;
+  }
+
+  async pauseOrder(orderData: PauseOrderRequest): Promise<Sale> {
+    const response = await apiService.postToken<{ success: boolean; data: Sale; message: string }>(
+      ENDPOINTS.POS.ORDER_PAUSE,
+      orderData
+    );
+    return response.data;
+  }
+
+  async deleteOrder(orderId: number): Promise<void> {
+    await apiService.deleteToken(ENDPOINTS.POS.ORDER_DELETE(orderId));
+  }
+
+  async createCustomer(customerData: CreateCustomerRequest): Promise<Customer> {
+    const response = await apiService.postToken<{ success: boolean; data: Customer; message: string }>(
+      ENDPOINTS.CUSTOMERS.CREATE,
+      customerData
+    );
+    return response.data;
+  }
+
+  async getCustomers(): Promise<Customer[]> {
+    const response = await apiService.getToken<Customer[] | { data: Customer[] }>(
+      ENDPOINTS.CUSTOMERS.LIST
+    );
+    return Array.isArray(response) ? response : response.data;
+  }
+
+  async validateCoupon(code: string): Promise<Coupon> {
+    const response = await apiService.getToken<Coupon | { data: Coupon }>(
+      ENDPOINTS.COUPONS.VALIDATE(code)
+    );
+    return 'data' in response ? response.data : response;
   }
 }
 

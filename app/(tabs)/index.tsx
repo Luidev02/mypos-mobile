@@ -1,9 +1,17 @@
+import CalculatorModal from '@/components/CalculatorModal';
+import CloseShiftModal from '@/components/CloseShiftModal';
+import CouponModal from '@/components/CouponModal';
+import CustomerModal from '@/components/CustomerModal';
+import OrdersModal from '@/components/OrdersModal';
+import OrderTypeModal from '@/components/OrderTypeModal';
+import SettingsModal from '@/components/SettingsModal';
 import ShiftModal from '@/components/ShiftModal';
 import { BorderRadius, Colors, FontSize, FontWeight, Shadow, Spacing } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
+import { useSale } from '@/contexts/SaleContext';
 import { posService } from '@/services';
-import type { Category, Product, Shift } from '@/types';
+import type { Category, Product, Sale, Shift } from '@/types';
 import { formatCurrency, getStockColor } from '@/utils/helpers';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -29,6 +37,20 @@ const isTablet = screenWidth >= 768;
 export default function POSScreen() {
   const { user } = useAuth();
   const { items, totalItems, subtotal, addItem, removeItem, updateQuantity, clearCart } = useCart();
+  const {
+    customer,
+    customerId,
+    orderType,
+    saleName,
+    discount,
+    couponId,
+    setCustomer,
+    setOrderType,
+    setSaleName,
+    setDiscount,
+    clearDiscount,
+    resetSaleData,
+  } = useSale();
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -38,9 +60,16 @@ export default function POSScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [shift, setShift] = useState<Shift | null>(null);
-  const [customer, setCustomer] = useState('Consumidor Final');
-  const [orderType, setOrderType] = useState('Sin tipo');
+  
+  // Modal states
   const [showShiftModal, setShowShiftModal] = useState(false);
+  const [showCloseShiftModal, setShowCloseShiftModal] = useState(false);
+  const [showOrdersModal, setShowOrdersModal] = useState(false);
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [showOrderTypeModal, setShowOrderTypeModal] = useState(false);
+  const [showCouponModal, setShowCouponModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showCalculatorModal, setShowCalculatorModal] = useState(false);
 
   // Calculate tax and total
   const tax = subtotal * 0.19; // 19% IVA
@@ -139,12 +168,23 @@ export default function POSScreen() {
   };
 
   const handleShiftSuccess = async () => {
-    const activeShift = await posService.getActiveShift();
-    setShift(activeShift);
+    try {
+      const activeShift = await posService.getActiveShift();
+      setShift(activeShift);
+    } catch (error) {
+      // Si no hay turno activo después del cierre, está bien
+      setShift(null);
+    }
   };
 
   const handleOpenShift = () => {
-    setShowShiftModal(true);
+    // Si hay turno activo, mostrar modal de cierre
+    // Si no hay turno, mostrar modal de apertura
+    if (shift && shift.id) {
+      setShowCloseShiftModal(true);
+    } else {
+      setShowShiftModal(true);
+    }
   };
 
   const handlePay = () => {
@@ -155,8 +195,56 @@ export default function POSScreen() {
     router.push('/cart');
   };
 
-  const handlePause = () => {
-    Alert.alert('Pausar Venta', 'Esta función estará disponible pronto');
+  const handlePause = async () => {
+    if (items.length === 0) {
+      Alert.alert('Carrito Vacío', 'No hay productos para pausar');
+      return;
+    }
+
+    Alert.alert(
+      'Pausar Venta',
+      '¿Desea guardar esta venta para continuar después?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Pausar',
+          onPress: async () => {
+            try {
+              const orderNumber = `TEMP-${Date.now()}`;
+              const taxAmount = subtotal * 0.19;
+              const discountAmount = subtotal * (discount / 100);
+              const totalAmount = subtotal + taxAmount - discountAmount;
+
+              const pauseData = {
+                customer_id: customerId,
+                customer_name: customer,
+                order_number: orderNumber,
+                sale_type: orderType || '',
+                coupon_id: couponId,
+                discount_percentage: discount,
+                subtotal: subtotal,
+                discount: discountAmount,
+                tax_total: taxAmount,
+                total: totalAmount,
+                products: items.map(item => ({
+                  id: item.product_id,
+                  price: item.unit_price,
+                  quantity: item.quantity,
+                  discount: item.discount || 0,
+                })),
+              };
+
+              await posService.pauseOrder(pauseData);
+              Alert.alert('Éxito', 'Venta pausada exitosamente');
+              clearCart();
+              resetSaleData();
+            } catch (error: any) {
+              Alert.alert('Error', 'No se pudo pausar la venta');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleClear = () => {
@@ -169,6 +257,36 @@ export default function POSScreen() {
         { text: 'Limpiar', style: 'destructive', onPress: clearCart },
       ]
     );
+  };
+
+  // Manejadores de los modales
+  const handleSelectOrder = (order: Sale) => {
+    // Cargar la orden en el carrito
+    // TODO: Implementar carga de orden completa con items
+    Alert.alert('Orden Cargada', `Orden ${order.invoice_number || order.folio} cargada`);
+  };
+
+  const handleSelectCustomer = (name: string, id: number) => {
+    setCustomer(name, id);
+  };
+
+  const handleSelectOrderType = (type: string) => {
+    const typeLabels: Record<string, string> = {
+      'carry': 'Llevar',
+      'delivery': 'Entrega',
+      'dine_in': 'Comer Aquí',
+    };
+    setOrderType(typeLabels[type] || type);
+  };
+
+  const handleApplyCoupon = (discountValue: number, id: number, code: string) => {
+    setDiscount(discountValue, id, code);
+    Alert.alert('Cupón Aplicado', `Descuento de ${discountValue}% aplicado`);
+  };
+
+  const handleUpdateSettings = (name: string) => {
+    setSaleName(name);
+    Alert.alert('Configuración Guardada', `Nombre: ${name}`);
   };
 
   const filteredProducts = searchQuery.trim() === '' ? products : products;
@@ -253,7 +371,7 @@ export default function POSScreen() {
 
         <TouchableOpacity 
           style={styles.actionButton}
-          onPress={() => Alert.alert('Órdenes', 'Gestión de órdenes disponible pronto')}
+          onPress={() => setShowOrdersModal(true)}
         >
           <Ionicons name="receipt-outline" size={16} color={Colors.white} />
           <Text style={styles.actionButtonText}>Órdenes</Text>
@@ -261,7 +379,7 @@ export default function POSScreen() {
 
         <TouchableOpacity 
           style={styles.actionButton}
-          onPress={() => Alert.alert('Tipo de Orden', 'Selección de tipo disponible pronto')}
+          onPress={() => setShowOrderTypeModal(true)}
         >
           <Ionicons name="document-text-outline" size={16} color={Colors.white} />
           <Text style={styles.actionButtonText}>{orderType}</Text>
@@ -269,7 +387,7 @@ export default function POSScreen() {
 
         <TouchableOpacity 
           style={styles.actionButton}
-          onPress={() => Alert.alert('Cliente', 'Selección de cliente disponible pronto')}
+          onPress={() => setShowCustomerModal(true)}
         >
           <Ionicons name="person-outline" size={16} color={Colors.white} />
           <Text style={styles.actionButtonText} numberOfLines={1}>{customer}</Text>
@@ -280,21 +398,21 @@ export default function POSScreen() {
       <View style={styles.quickActions}>
         <TouchableOpacity 
           style={styles.quickActionButton}
-          onPress={() => Alert.alert('Cupones', 'Disponible pronto')}
+          onPress={() => setShowCouponModal(true)}
         >
           <Ionicons name="pricetag-outline" size={18} color={Colors.primary} />
           <Text style={styles.quickActionText}>Cupones</Text>
         </TouchableOpacity>
         <TouchableOpacity 
           style={styles.quickActionButton}
-          onPress={() => Alert.alert('Ajustes', 'Disponible pronto')}
+          onPress={() => setShowSettingsModal(true)}
         >
           <Ionicons name="settings-outline" size={18} color={Colors.primary} />
           <Text style={styles.quickActionText}>Ajustes</Text>
         </TouchableOpacity>
         <TouchableOpacity 
           style={styles.quickActionButton}
-          onPress={() => Alert.alert('Calculadora', 'Disponible pronto')}
+          onPress={() => setShowCalculatorModal(true)}
         >
           <Ionicons name="calculator-outline" size={18} color={Colors.primary} />
           <Text style={styles.quickActionText}>Calculadora</Text>
@@ -354,31 +472,112 @@ export default function POSScreen() {
         }
       />
 
-      {/* Floating Cart Button */}
-      {totalItems > 0 && (
-        <TouchableOpacity 
-          style={styles.cartFloating}
-          onPress={() => router.push('/cart')}
-        >
-          <View style={styles.cartFloatingContent}>
-            <View style={styles.cartBadge}>
-              <Text style={styles.cartBadgeText}>{totalItems}</Text>
-            </View>
-            <Ionicons name="cart" size={24} color={Colors.white} />
-            <View style={styles.cartFloatingInfo}>
-              <Text style={styles.cartFloatingLabel}>Ver Carrito</Text>
-              <Text style={styles.cartFloatingTotal}>{formatCurrency(total)}</Text>
-            </View>
+      {/* Action Buttons Bar */}
+      <View style={styles.actionBar}>
+        <View style={styles.actionBarSummary}>
+          <View style={styles.itemsCount}>
+            <Ionicons name="cart-outline" size={20} color={Colors.text} />
+            <Text style={styles.itemsCountText}>{totalItems} items</Text>
           </View>
-          <Ionicons name="chevron-forward" size={24} color={Colors.white} />
-        </TouchableOpacity>
-      )}
+          <View style={styles.totalSection}>
+            <Text style={styles.totalLabel}>Total:</Text>
+            <Text style={styles.totalValue}>{formatCurrency(total)}</Text>
+          </View>
+        </View>
+        
+        <View style={styles.actionButtons}>
+          <TouchableOpacity 
+            style={[styles.actionBarButton, styles.actionBarButtonSecondary]}
+            onPress={handleClear}
+            disabled={totalItems === 0}
+          >
+            <Ionicons name="trash-outline" size={20} color={totalItems === 0 ? Colors.textLight : Colors.error} />
+            <Text style={[styles.actionBarButtonText, totalItems === 0 && styles.actionBarButtonTextDisabled]}>
+              Limpiar
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.actionBarButton, styles.actionBarButtonSecondary]}
+            onPress={handlePause}
+            disabled={totalItems === 0}
+          >
+            <Ionicons name="pause-outline" size={20} color={totalItems === 0 ? Colors.textLight : Colors.warning} />
+            <Text style={[styles.actionBarButtonText, totalItems === 0 && styles.actionBarButtonTextDisabled]}>
+              Pausar
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.actionBarButton, styles.actionBarButtonPrimary]}
+            onPress={handlePay}
+            disabled={totalItems === 0}
+          >
+            <Ionicons name="card-outline" size={20} color={Colors.white} />
+            <Text style={styles.actionBarButtonTextPrimary}>
+              Procesar Pago
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
 
       {/* Shift Modal */}
       <ShiftModal
         visible={showShiftModal}
         onClose={() => setShowShiftModal(false)}
         onSuccess={handleShiftSuccess}
+      />
+
+      {/* Close Shift Modal */}
+      <CloseShiftModal
+        visible={showCloseShiftModal}
+        onClose={() => setShowCloseShiftModal(false)}
+        onSuccess={handleShiftSuccess}
+        activeShift={shift}
+      />
+
+      {/* Orders Modal */}
+      <OrdersModal
+        visible={showOrdersModal}
+        onClose={() => setShowOrdersModal(false)}
+        onSelectOrder={handleSelectOrder}
+      />
+
+      {/* Customer Modal */}
+      <CustomerModal
+        visible={showCustomerModal}
+        onClose={() => setShowCustomerModal(false)}
+        currentCustomer={customer}
+        onSelectCustomer={handleSelectCustomer}
+      />
+
+      {/* Order Type Modal */}
+      <OrderTypeModal
+        visible={showOrderTypeModal}
+        onClose={() => setShowOrderTypeModal(false)}
+        currentType={orderType}
+        onSelectType={handleSelectOrderType}
+      />
+
+      {/* Coupon Modal */}
+      <CouponModal
+        visible={showCouponModal}
+        onClose={() => setShowCouponModal(false)}
+        onApplyCoupon={handleApplyCoupon}
+      />
+
+      {/* Settings Modal */}
+      <SettingsModal
+        visible={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
+        currentSaleName={saleName}
+        onUpdateSettings={handleUpdateSettings}
+      />
+
+      {/* Calculator Modal */}
+      <CalculatorModal
+        visible={showCalculatorModal}
+        onClose={() => setShowCalculatorModal(false)}
       />
     </SafeAreaView>
   );
@@ -522,7 +721,7 @@ const styles = StyleSheet.create({
   },
   productsList: {
     padding: Spacing.sm,
-    paddingBottom: 100,
+    paddingBottom: Spacing.md,
   },
   productCard: {
     flex: 1,
@@ -572,48 +771,77 @@ const styles = StyleSheet.create({
     color: Colors.textLight,
     marginTop: Spacing.md,
   },
-  cartFloating: {
-    position: 'absolute',
-    bottom: Spacing.md,
-    left: Spacing.md,
-    right: Spacing.md,
-    backgroundColor: Colors.primary,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  actionBar: {
+    backgroundColor: Colors.white,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
     ...Shadow.lg,
   },
-  cartFloatingContent: {
+  actionBarSummary: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  itemsCount: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.md,
-  },
-  cartBadge: {
-    backgroundColor: Colors.white,
-    borderRadius: BorderRadius.full,
-    width: 28,
-    height: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cartBadgeText: {
-    color: Colors.primary,
-    fontSize: FontSize.sm,
-    fontWeight: FontWeight.bold,
-  },
-  cartFloatingInfo: {
     gap: Spacing.xs,
   },
-  cartFloatingLabel: {
-    color: Colors.white,
+  itemsCountText: {
     fontSize: FontSize.sm,
+    color: Colors.text,
     fontWeight: FontWeight.medium,
   },
-  cartFloatingTotal: {
-    color: Colors.white,
-    fontSize: FontSize.lg,
+  totalSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  totalLabel: {
+    fontSize: FontSize.md,
+    color: Colors.textLight,
+  },
+  totalValue: {
+    fontSize: FontSize.xl,
     fontWeight: FontWeight.bold,
+    color: Colors.primary,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  actionBarButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    gap: Spacing.xs,
+  },
+  actionBarButtonSecondary: {
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  actionBarButtonPrimary: {
+    backgroundColor: Colors.primary,
+    flex: 1.5,
+  },
+  actionBarButtonText: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
+    color: Colors.text,
+  },
+  actionBarButtonTextDisabled: {
+    color: Colors.textLight,
+  },
+  actionBarButtonTextPrimary: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
+    color: Colors.white,
   },
 });
