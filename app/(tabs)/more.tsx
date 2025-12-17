@@ -1,0 +1,240 @@
+import { BorderRadius, Colors, FontSize, FontWeight, Shadow, Spacing } from '@/constants/theme';
+import { useAuth } from '@/contexts/AuthContext';
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import React from 'react';
+import {
+    Alert,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+export default function MoreScreen() {
+  const { user, logout } = useAuth();
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Cerrar Sesión',
+      '¿Estás seguro que deseas cerrar sesión?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { 
+          text: 'Cerrar Sesión', 
+          style: 'destructive',
+          onPress: async () => {
+            await logout();
+            router.replace('/login');
+          }
+        },
+      ]
+    );
+  };
+
+  const menuItems = [
+    {
+      icon: 'person-outline',
+      title: 'Mi Perfil',
+      subtitle: 'Ver y editar información personal',
+      onPress: () => Alert.alert('Próximamente', 'Función en desarrollo'),
+    },
+    {
+      icon: 'people-outline',
+      title: 'Clientes',
+      subtitle: 'Gestionar clientes',
+      onPress: () => Alert.alert('Próximamente', 'Función en desarrollo'),
+    },
+    {
+      icon: 'settings-outline',
+      title: 'Configuración',
+      subtitle: 'Ajustes de la aplicación',
+      onPress: () => Alert.alert('Próximamente', 'Función en desarrollo'),
+    },
+    {
+      icon: 'print-outline',
+      title: 'Impresora',
+      subtitle: 'Configurar impresora térmica',
+      onPress: () => Alert.alert('Próximamente', 'Función en desarrollo'),
+    },
+    {
+      icon: 'help-circle-outline',
+      title: 'Ayuda y Soporte',
+      subtitle: 'Obtener ayuda',
+      onPress: () => Alert.alert('Próximamente', 'Función en desarrollo'),
+    },
+    {
+      icon: 'information-circle-outline',
+      title: 'Acerca de',
+      subtitle: 'Versión 1.0.0',
+      onPress: () => Alert.alert('MyPOS Mobile', 'Versión 1.0.0\n\nSistema de Punto de Venta'),
+    },
+  ];
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Más</Text>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.profileCard}>
+          <View style={styles.profileAvatar}>
+            <Ionicons name="person" size={40} color={Colors.white} />
+          </View>
+          <View style={styles.profileInfo}>
+            <Text style={styles.profileName}>{user?.username}</Text>
+            <Text style={styles.profileRole}>{user?.role_name}</Text>
+            <Text style={styles.profileCompany}>{user?.company_name}</Text>
+          </View>
+        </View>
+
+        <View style={styles.menuSection}>
+          {menuItems.map((item, index) => (
+            <TouchableOpacity
+              key={index}
+              style={[
+                styles.menuItem,
+                index === menuItems.length - 1 && styles.menuItemLast,
+              ]}
+              onPress={item.onPress}
+            >
+              <View style={styles.menuItemLeft}>
+                <View style={styles.menuItemIcon}>
+                  <Ionicons name={item.icon as any} size={24} color={Colors.primary} />
+                </View>
+                <View style={styles.menuItemText}>
+                  <Text style={styles.menuItemTitle}>{item.title}</Text>
+                  <Text style={styles.menuItemSubtitle}>{item.subtitle}</Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={Colors.textLight} />
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <Ionicons name="log-out-outline" size={20} color={Colors.white} />
+          <Text style={styles.logoutButtonText}>Cerrar Sesión</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  header: {
+    padding: Spacing.lg,
+    backgroundColor: Colors.white,
+    ...Shadow.sm,
+  },
+  headerTitle: {
+    fontSize: FontSize.xl,
+    fontWeight: FontWeight.bold,
+    color: Colors.text,
+  },
+  scrollContent: {
+    padding: Spacing.md,
+    gap: Spacing.lg,
+  },
+  profileCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    gap: Spacing.md,
+    ...Shadow.sm,
+  },
+  profileAvatar: {
+    width: 64,
+    height: 64,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileInfo: {
+    flex: 1,
+    gap: Spacing.xs,
+  },
+  profileName: {
+    fontSize: FontSize.lg,
+    fontWeight: FontWeight.bold,
+    color: Colors.text,
+  },
+  profileRole: {
+    fontSize: FontSize.sm,
+    color: Colors.textLight,
+  },
+  profileCompany: {
+    fontSize: FontSize.xs,
+    color: Colors.primary,
+    fontWeight: FontWeight.medium,
+  },
+  menuSection: {
+    backgroundColor: Colors.white,
+    borderRadius: BorderRadius.md,
+    overflow: 'hidden',
+    ...Shadow.sm,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  menuItemLast: {
+    borderBottomWidth: 0,
+  },
+  menuItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: Spacing.md,
+  },
+  menuItemIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuItemText: {
+    flex: 1,
+    gap: Spacing.xs,
+  },
+  menuItemTitle: {
+    fontSize: FontSize.md,
+    fontWeight: FontWeight.semibold,
+    color: Colors.text,
+  },
+  menuItemSubtitle: {
+    fontSize: FontSize.sm,
+    color: Colors.textLight,
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.error,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    gap: Spacing.sm,
+    ...Shadow.sm,
+  },
+  logoutButtonText: {
+    fontSize: FontSize.md,
+    fontWeight: FontWeight.semibold,
+    color: Colors.white,
+  },
+});
