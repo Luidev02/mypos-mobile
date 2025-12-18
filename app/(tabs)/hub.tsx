@@ -14,18 +14,18 @@ interface ModuleCard {
 
 const modules: ModuleCard[] = [
   { id: 'pos', title: 'Punto de Venta', icon: 'cart', route: '/(tabs)', color: Colors.primary },
-  { id: 'categories', title: 'Categorías', icon: 'grid', route: '/categories/index', color: Colors.primaryLight },
-  { id: 'products', title: 'Productos', icon: 'pricetag', route: '/products/index', color: Colors.footer },
-  { id: 'customers', title: 'Clientes', icon: 'people', route: '/customers/index', color: '#8B6F6F' },
-  { id: 'sales', title: 'Ventas', icon: 'receipt', route: '/sales/index', color: Colors.primaryDark },
+  { id: 'categories', title: 'Categorías', icon: 'grid', route: '/categories', color: Colors.primaryLight },
+  { id: 'products', title: 'Productos', icon: 'pricetag', route: '/products', color: Colors.footer },
+  { id: 'customers', title: 'Clientes', icon: 'people', route: '/customers', color: '#8B6F6F' },
+  { id: 'sales', title: 'Ventas', icon: 'receipt', route: '/sales', color: Colors.primaryDark },
   { id: 'inventory', title: 'Inventario', icon: 'cube', route: '/(tabs)/inventory', color: '#9D7E7E' },
-  { id: 'warehouses', title: 'Bodegas', icon: 'business', route: '/warehouses/index', color: '#A08080' },
-  { id: 'taxes', title: 'Impuestos', icon: 'calculator', route: '/taxes/index', color: Colors.dark },
-  { id: 'coupons', title: 'Cupones', icon: 'gift', route: '/coupons/index', color: '#6D5555' },
-  { id: 'purchases', title: 'Compras', icon: 'bag-handle', route: '/purchases/index', color: '#5C4444' },
+  { id: 'warehouses', title: 'Bodegas', icon: 'business', route: '/warehouses', color: '#A08080' },
+  { id: 'taxes', title: 'Impuestos', icon: 'calculator', route: '/taxes', color: Colors.dark },
+  { id: 'coupons', title: 'Cupones', icon: 'gift', route: '/coupons', color: '#6D5555' },
+  { id: 'purchases', title: 'Compras', icon: 'bag-handle', route: '/purchases', color: '#5C4444' },
   { id: 'reports', title: 'Reportes', icon: 'bar-chart', route: '/(tabs)/reports', color: Colors.success },
-  { id: 'profile', title: 'Perfil', icon: 'person', route: '/profile/index', color: '#7A6060' },
-  { id: 'company', title: 'Empresa', icon: 'settings', route: '/company/index', color: Colors.foreground },
+  { id: 'profile', title: 'Perfil', icon: 'person', route: '/profile', color: '#7A6060' },
+  { id: 'company', title: 'Empresa', icon: 'settings', route: '/company', color: Colors.foreground },
 ];
 
 export default function HubScreen() {

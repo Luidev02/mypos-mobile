@@ -1,10 +1,12 @@
 import BarcodeScanner from '@/components/BarcodeScanner';
 import CalculatorModal from '@/components/CalculatorModal';
+import { CategoryImage } from '@/components/CategoryImage';
 import CloseShiftModal from '@/components/CloseShiftModal';
 import CouponModal from '@/components/CouponModal';
 import CustomerModal from '@/components/CustomerModal';
 import OrdersModal from '@/components/OrdersModal';
 import OrderTypeModal from '@/components/OrderTypeModal';
+import { ProductImage } from '@/components/ProductImage';
 import SettingsModal from '@/components/SettingsModal';
 import ShiftModal from '@/components/ShiftModal';
 import { BorderRadius, Colors, FontSize, FontWeight, Shadow, Spacing } from '@/constants/theme';
@@ -325,6 +327,12 @@ export default function POSScreen() {
       ]}
       onPress={() => handleCategorySelect(item)}
     >
+      <CategoryImage 
+        categoryId={item.id}
+        style={styles.categoryImage}
+        placeholderSize={20}
+        placeholderColor={selectedCategory === item.id ? '#fff' : '#94A3B8'}
+      />
       <Text
         style={[
           styles.categoryText,
@@ -342,9 +350,11 @@ export default function POSScreen() {
       onPress={() => handleProductPress(item)}
       disabled={item.stock <= 0}
     >
-      <View style={styles.productImagePlaceholder}>
-        <Ionicons name="image-outline" size={32} color={Colors.textLight} />
-      </View>
+      <ProductImage 
+        productId={item.id}
+        style={styles.productImagePlaceholder}
+        placeholderColor="#94A3B8"
+      />
       <View style={styles.productInfo}>
         <Text style={styles.productName} numberOfLines={2}>
           {item.name}
@@ -370,7 +380,7 @@ export default function POSScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity 
-          onPress={() => router.push('/hub')}
+          onPress={() => router.push('/(tabs)/hub')}
           style={styles.backButton}
         >
           <Ionicons name="arrow-back" size={24} color={Colors.white} />
@@ -744,6 +754,12 @@ const styles = StyleSheet.create({
   categoryCardSelected: {
     backgroundColor: Colors.primary,
     borderColor: Colors.primary,
+  },
+  categoryImage: {
+    width: 32,
+    height: 32,
+    borderRadius: BorderRadius.sm,
+    marginBottom: Spacing.xs,
   },
   categoryText: {
     fontSize: FontSize.sm,

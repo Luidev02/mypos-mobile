@@ -71,6 +71,7 @@ export const ENDPOINTS = {
     CREATE: '/api/categories',
     UPDATE: (id: number) => `/api/categories/${id}`,
     DELETE: (id: number) => `/api/categories/${id}`,
+    IMAGE: (id: number) => `/api/categories/image/${id}`,
   },
 
   // Coupons

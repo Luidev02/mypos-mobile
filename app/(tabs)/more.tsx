@@ -51,25 +51,25 @@ export default function MoreScreen() {
       icon: 'grid-outline',
       title: 'Categorías',
       subtitle: 'Gestionar categorías de productos',
-      onPress: () => router.push('/categories/index'),
+      onPress: () => router.push('/categories'),
     },
     {
       icon: 'pricetag-outline',
       title: 'Productos',
       subtitle: 'Catálogo de productos',
-      onPress: () => router.push('/products/index'),
+      onPress: () => router.push('/products'),
     },
     {
       icon: 'people-outline',
       title: 'Clientes',
       subtitle: 'Directorio de clientes',
-      onPress: () => router.push('/customers/index'),
+      onPress: () => router.push('/customers'),
     },
     {
       icon: 'receipt-outline',
       title: 'Ventas',
       subtitle: 'Historial de ventas',
-      onPress: () => router.push('/sales/index'),
+      onPress: () => router.push('/sales'),
     },
     {
       icon: 'business-outline',
@@ -81,13 +81,13 @@ export default function MoreScreen() {
       icon: 'calculator-outline',
       title: 'Impuestos',
       subtitle: 'Configuración de impuestos',
-      onPress: () => router.push('/taxes/index'),
+      onPress: () => router.push('/taxes'),
     },
     {
       icon: 'gift-outline',
       title: 'Cupones',
       subtitle: 'Códigos promocionales',
-      onPress: () => router.push('/coupons/index'),
+      onPress: () => router.push('/coupons'),
     },
     {
       icon: 'bag-handle-outline',
@@ -99,7 +99,7 @@ export default function MoreScreen() {
       icon: 'settings-outline',
       title: 'Configuración de Empresa',
       subtitle: 'Ajustes y configuración',
-      onPress: () => router.push('/company/index'),
+      onPress: () => router.push('/company'),
     },
     {
       icon: 'information-circle-outline',
@@ -113,7 +113,7 @@ export default function MoreScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity 
-          onPress={() => router.replace('/hub')}
+          onPress={() => router.replace('/(tabs)/hub')}
           style={styles.backButton}
         >
           <Ionicons name="arrow-back" size={24} color={Colors.text} />

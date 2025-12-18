@@ -78,7 +78,7 @@ export default function InventoryScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity 
-          onPress={() => router.push('/hub')}
+          onPress={() => router.push('/(tabs)/hub')}
           style={styles.backButton}
         >
           <Ionicons name="arrow-back" size={24} color={Colors.text} />

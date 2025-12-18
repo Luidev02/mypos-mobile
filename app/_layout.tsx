@@ -55,17 +55,18 @@ function RootLayoutNav() {
           <SaleProvider>
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="login" options={{ headerShown: false }} />
-              <Stack.Screen name="hub" options={{ headerShown: false }} />
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
               <Stack.Screen name="cart" options={{ headerShown: false }} />
-              <Stack.Screen name="products" options={{ headerShown: false }} />
-              <Stack.Screen name="categories" options={{ headerShown: false }} />
-              <Stack.Screen name="customers" options={{ headerShown: false }} />
+              <Stack.Screen name="products/index" options={{ headerShown: false }} />
+              <Stack.Screen name="categories/index" options={{ headerShown: false }} />
+              <Stack.Screen name="categories/[id]" options={{ headerShown: false }} />
+              <Stack.Screen name="categories/new" options={{ headerShown: false }} />
+              <Stack.Screen name="customers/index" options={{ headerShown: false }} />
               <Stack.Screen name="shifts" options={{ headerShown: false }} />
-              <Stack.Screen name="sales" options={{ headerShown: false }} />
-              <Stack.Screen name="coupons" options={{ headerShown: false }} />
-              <Stack.Screen name="taxes" options={{ headerShown: false }} />
-              <Stack.Screen name="company" options={{ headerShown: false }} />
+              <Stack.Screen name="sales/index" options={{ headerShown: false }} />
+              <Stack.Screen name="coupons/index" options={{ headerShown: false }} />
+              <Stack.Screen name="taxes/index" options={{ headerShown: false }} />
+              <Stack.Screen name="company/index" options={{ headerShown: false }} />
               <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
             </Stack>
           </SaleProvider>
