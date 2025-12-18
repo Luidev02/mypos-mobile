@@ -1,5 +1,5 @@
 import { API_CONFIG } from '@/constants/api';
-import { storage } from '@/services/storage';
+import { storageService } from '@/services/storage';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, StyleSheet, View } from 'react-native';
@@ -11,11 +11,11 @@ interface CategoryImageProps {
   placeholderSize?: number;
 }
 
-export function CategoryImage({ 
-  categoryId, 
-  style, 
+export function CategoryImage({
+  categoryId,
+  style,
   placeholderColor = '#CBD5E1',
-  placeholderSize = 32 
+  placeholderSize = 32
 }: CategoryImageProps) {
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -29,15 +29,15 @@ export function CategoryImage({
     try {
       setLoading(true);
       setError(false);
-      
-      const token = await storage.getToken();
+
+      const token = await storageService.getToken();
       if (!token) {
         throw new Error('No token available');
       }
 
       const baseUrl = API_CONFIG.BASE_URL;
       const imageUrl = `${baseUrl}/api/categories/image/${categoryId}`;
-      
+
       const response = await fetch(imageUrl, {
         method: 'GET',
         headers: {
@@ -52,7 +52,7 @@ export function CategoryImage({
 
       // Check if response is JSON or direct image
       const contentType = response.headers.get('content-type');
-      
+
       if (contentType && contentType.includes('application/json')) {
         // If it's JSON, parse and get the image URL
         const data = await response.json();
@@ -65,7 +65,7 @@ export function CategoryImage({
         // Direct image response - use the URL with auth header
         setImageSrc(imageUrl);
       }
-      
+
       setLoading(false);
     } catch (err) {
       console.error('Error loading image:', err);
@@ -91,8 +91,8 @@ export function CategoryImage({
   }
 
   return (
-    <Image 
-      source={{ uri: imageSrc }} 
+    <Image
+      source={{ uri: imageSrc }}
       style={style}
       resizeMode="cover"
     />
