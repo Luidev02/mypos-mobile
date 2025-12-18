@@ -19,7 +19,7 @@ import {
 interface OrdersModalProps {
   visible: boolean;
   onClose: () => void;
-  onSelectOrder: (order: Sale) => void;
+  onSelectOrder: (order: Sale) => Promise<boolean>;
 }
 
 export default function OrdersModal({ visible, onClose, onSelectOrder }: OrdersModalProps) {
@@ -51,27 +51,29 @@ export default function OrdersModal({ visible, onClose, onSelectOrder }: OrdersM
     loadOrders();
   };
 
-  const handleSelectOrder = (order: Sale) => {
-    Alert.alert(
-      'Abrir Orden',
-      `¿Deseas cargar la orden ${order.invoice_number || order.folio || `#${order.id}`}?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Abrir',
-          onPress: () => {
-            onSelectOrder(order);
-            onClose();
-          },
-        },
-      ]
-    );
+  const handleSelectOrder = async (order: Sale) => {
+    console.log('handleSelectOrder clicked', order);
+    
+    try {
+      console.log('Llamando a onSelectOrder...');
+      const success = await onSelectOrder(order);
+      console.log('Resultado de onSelectOrder:', success);
+      
+      if (success) {
+        console.log('Cerrando modal...');
+        onClose();
+      }
+    } catch (error: any) {
+      console.error('Error en handleSelectOrder del modal:', error);
+      Alert.alert('Error', 'No se pudo cargar la orden');
+    }
   };
 
-  const handleDeleteOrder = async (orderId: number) => {
+  const handleDeleteOrder = async (orderId: number, orderName: string) => {
+    console.log('handleDeleteOrder clicked', orderId, orderName);
     Alert.alert(
       'Eliminar Orden',
-      '¿Estás seguro de eliminar esta orden?',
+      `¿Está seguro de eliminar la orden ${orderName}?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -79,10 +81,14 @@ export default function OrdersModal({ visible, onClose, onSelectOrder }: OrdersM
           style: 'destructive',
           onPress: async () => {
             try {
+              console.log('Eliminando orden...', orderId);
               await posService.deleteOrder(orderId);
-              Alert.alert('Éxito', 'Orden eliminada');
-              loadOrders();
+              // Actualizar la lista local inmediatamente
+              setOrders(prevOrders => prevOrders.filter(o => o.id !== orderId));
+              console.log('Orden eliminada correctamente');
+              Alert.alert('Éxito', 'Orden eliminada correctamente');
             } catch (error: any) {
+              console.error('Error eliminando orden:', error);
               Alert.alert('Error', 'No se pudo eliminar la orden');
             }
           },
@@ -115,7 +121,9 @@ export default function OrdersModal({ visible, onClose, onSelectOrder }: OrdersM
     }
   };
 
-  const renderOrder = ({ item }: { item: Sale }) => (
+  const renderOrder = ({ item }: { item: Sale }) => {
+    console.log('Renderizando orden:', item.id);
+    return (
     <View style={styles.orderCard}>
       <View style={styles.orderHeader}>
         <View style={styles.orderTitleRow}>
@@ -171,21 +179,33 @@ export default function OrdersModal({ visible, onClose, onSelectOrder }: OrdersM
         <View style={styles.orderActions}>
           <TouchableOpacity
             style={styles.orderActionButton}
-            onPress={() => handleSelectOrder(item)}
+            onPress={() => {
+              console.log('Botón Abrir presionado');
+              handleSelectOrder(item);
+            }}
+            activeOpacity={0.7}
           >
             <Ionicons name="open-outline" size={20} color={Colors.primary} />
             <Text style={styles.orderActionText}>Abrir</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.orderActionButton, styles.deleteButton]}
-            onPress={() => handleDeleteOrder(item.id)}
+            onPress={() => {
+              console.log('Botón Eliminar presionado');
+              handleDeleteOrder(
+                item.id,
+                item.invoice_number || item.folio || `#${item.id}`
+              );
+            }}
+            activeOpacity={0.7}
           >
             <Ionicons name="trash-outline" size={20} color={Colors.error} />
           </TouchableOpacity>
         </View>
       </View>
     </View>
-  );
+    );
+  };
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">

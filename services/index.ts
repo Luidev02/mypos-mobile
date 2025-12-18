@@ -104,6 +104,29 @@ class POSService {
     }));
   }
 
+  async getProductById(productId: number): Promise<Product> {
+    const response = await apiService.getToken<Product | { data: Product }>(
+      ENDPOINTS.PRODUCTS.DETAIL(productId)
+    );
+    const product = 'data' in response ? response.data : response;
+    
+    return {
+      id: product.product_id || product.id,
+      product_id: product.product_id || product.id,
+      name: product.title || product.name,
+      title: product.title || product.name,
+      sku: product.sku || '',
+      barcode: product.barcode,
+      price: parseFloat(product.price?.toString() || '0'),
+      stock: parseFloat(product.stock?.toString() || '0'),
+      image: product.image,
+      image_url: product.image_url,
+      category_id: product.category_id,
+      is_active: product.is_active ?? true,
+      is_inventory_managed: product.is_inventory_managed ?? true,
+    };
+  }
+
   async searchCustomers(query: string): Promise<Customer[]> {
     const response = await apiService.getToken<Customer[] | { data: Customer[] }>(
       `${ENDPOINTS.POS.CUSTOMERS_SEARCH}?q=${encodeURIComponent(query)}`

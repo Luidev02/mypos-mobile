@@ -276,26 +276,155 @@ export default function POSScreen() {
   };
 
   const handleClear = () => {
-    if (items.length === 0) return;
+    console.log('handleClear presionado, items:', items.length);
+    if (items.length === 0) {
+      console.log('Carrito vacío, no hay nada que limpiar');
+      return;
+    }
+    console.log('Mostrando alerta de confirmación');
     Alert.alert(
       'Limpiar Carrito',
-      '¿Está seguro de eliminar todos los productos?',
+      '¿Está seguro de eliminar todos los productos y resetear los datos de venta?',
       [
         { text: 'Cancelar', style: 'cancel' },
-        { text: 'Limpiar', style: 'destructive', onPress: clearCart },
+        { 
+          text: 'Limpiar', 
+          style: 'destructive', 
+          onPress: () => {
+            console.log('Limpiando carrito y reseteando datos...');
+            clearCart();
+            resetSaleData();
+            console.log('Carrito limpiado exitosamente');
+            Alert.alert('Carrito Limpiado', 'Se eliminaron todos los productos y datos de venta');
+          }
+        },
       ]
     );
   };
 
   // Manejadores de los modales
-  const handleSelectOrder = (order: Sale) => {
-    // Cargar la orden en el carrito
-    // TODO: Implementar carga de orden completa con items
-    Alert.alert('Orden Cargada', `Orden ${order.invoice_number || order.folio} cargada`);
+  const handleSelectOrder = async (order: Sale): Promise<boolean> => {
+    console.log('=== INICIO handleSelectOrder ===');
+    console.log('Orden recibida:', JSON.stringify(order, null, 2));
+    
+    try {
+      // Obtener el detalle completo de la orden con sus productos
+      console.log('Obteniendo detalle de orden ID:', order.id);
+      const orderDetail = await posService.getOrderDetail(order.id);
+      console.log('Detalle obtenido:', JSON.stringify(orderDetail, null, 2));
+      
+      // Verificar que tenga productos
+      const items = orderDetail.items || [];
+      console.log('Cantidad de items:', items.length);
+      
+      if (items.length === 0) {
+        console.warn('La orden no tiene productos');
+        Alert.alert('Error', 'Esta orden no tiene productos asociados');
+        return false;
+      }
+
+      // Limpiar el carrito actual y resetear datos de venta
+      console.log('Limpiando carrito...');
+      clearCart();
+      console.log('Reseteando datos de venta...');
+      resetSaleData();
+      
+      // Cargar los datos de la venta (cliente)
+      if (orderDetail.customer_name && orderDetail.customer_id) {
+        console.log('Estableciendo cliente:', orderDetail.customer_name);
+        setCustomer(orderDetail.customer_name, orderDetail.customer_id);
+      }
+      
+      // Cargar tipo de orden si existe
+      if (orderDetail.sale_type) {
+        console.log('Estableciendo tipo de orden:', orderDetail.sale_type);
+        setOrderType(orderDetail.sale_type);
+      }
+      
+      // Aplicar descuento/cupón si existe
+      if (orderDetail.discount && orderDetail.discount > 0) {
+        console.log('Aplicando descuento:', orderDetail.discount);
+        setDiscount(
+          orderDetail.discount,
+          orderDetail.coupon_id || null,
+          ''
+        );
+      }
+
+      // Cargar cada producto en el carrito
+      console.log('Cargando productos al carrito...');
+      let productosAgregados = 0;
+      
+      for (const item of items) {
+        console.log(`Procesando producto ${item.product_id}, cantidad: ${item.quantity}`);
+        
+        try {
+          // Intentar obtener el producto completo
+          const fullProduct = await posService.getProductById(item.product_id);
+          console.log('Producto completo obtenido:', fullProduct.name);
+          addItem(fullProduct, item.quantity);
+          productosAgregados++;
+        } catch (prodError) {
+          // Si no se puede obtener el producto completo, usar datos básicos del item
+          console.warn(`No se pudo obtener producto ${item.product_id}, usando datos básicos`, prodError);
+          const basicProduct: Product = {
+            id: item.product_id,
+            sku: '',
+            name: `Producto #${item.product_id}`,
+            price: item.price,
+            stock: 999,
+            image_url: null,
+            category_id: null,
+            is_active: true,
+            is_inventory_managed: item.is_inventory_managed !== undefined ? item.is_inventory_managed : true,
+          };
+          addItem(basicProduct, item.quantity);
+          productosAgregados++;
+        }
+      }
+
+      console.log(`Total de productos agregados al carrito: ${productosAgregados}`);
+
+      // Eliminar la orden del backend después de cargarla exitosamente
+      console.log('Eliminando orden del backend...');
+      await posService.deleteOrder(order.id);
+      console.log('Orden eliminada exitosamente');
+      
+      // Cerrar el modal
+      console.log('Cerrando modal...');
+      setShowOrdersModal(false);
+      
+      // Mostrar mensaje de éxito
+      setTimeout(() => {
+        Alert.alert(
+          'Orden Cargada',
+          `Se cargaron ${productosAgregados} productos de la orden ${orderDetail.invoice_number || orderDetail.folio || `#${order.id}`}`
+        );
+      }, 300);
+      
+      console.log('=== FIN handleSelectOrder - ÉXITO ===');
+      return true;
+      
+    } catch (error: any) {
+      console.error('=== ERROR en handleSelectOrder ===');
+      console.error('Error completo:', error);
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+      
+      Alert.alert(
+        'Error',
+        'No se pudo cargar la orden: ' + (error.response?.data?.message || error.message || 'Error desconocido')
+      );
+      
+      console.log('=== FIN handleSelectOrder - ERROR ===');
+      return false;
+    }
   };
 
   const handleSelectCustomer = (name: string, id: number) => {
+    console.log('handleSelectCustomer llamado:', name, id);
     setCustomer(name, id);
+    console.log('Cliente actualizado');
   };
 
   const handleSelectOrderType = (type: string) => {
@@ -423,7 +552,11 @@ export default function POSScreen() {
 
         <TouchableOpacity 
           style={styles.actionButton}
-          onPress={() => setShowCustomerModal(true)}
+          onPress={() => {
+            console.log('Botón cliente presionado');
+            setShowCustomerModal(true);
+          }}
+          activeOpacity={0.7}
         >
           <Ionicons name="person-outline" size={16} color={Colors.white} />
           <Text style={styles.actionButtonText} numberOfLines={1}>{customer}</Text>
@@ -524,8 +657,12 @@ export default function POSScreen() {
         <View style={styles.actionButtons}>
           <TouchableOpacity 
             style={[styles.actionBarButton, styles.actionBarButtonSecondary]}
-            onPress={handleClear}
+            onPress={() => {
+              console.log('Botón limpiar presionado');
+              handleClear();
+            }}
             disabled={totalItems === 0}
+            activeOpacity={0.7}
           >
             <Ionicons name="trash-outline" size={20} color={totalItems === 0 ? Colors.textLight : Colors.error} />
             <Text style={[styles.actionBarButtonText, totalItems === 0 && styles.actionBarButtonTextDisabled]}>

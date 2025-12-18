@@ -4,6 +4,7 @@ import type { Customer } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import {
+    ActivityIndicator,
     Alert,
     Modal,
     ScrollView,
@@ -27,10 +28,11 @@ export default function CustomerModal({
   currentCustomer,
   onSelectCustomer,
 }: CustomerModalProps) {
+  console.log('CustomerModal renderizado, visible:', visible);
   const [activeTab, setActiveTab] = useState<'search' | 'create'>('search');
   const [searchCode, setSearchCode] = useState('');
   const [isSearching, setIsSearching] = useState(false);
-  const [foundCustomer, setFoundCustomer] = useState<any>(null);
+  const [foundCustomer, setFoundCustomer] = useState<Customer | null>(null);
 
   // Estado del formulario de nuevo cliente
   const [newCustomer, setNewCustomer] = useState({
@@ -42,6 +44,7 @@ export default function CustomerModal({
     address: '',
     city: '',
   });
+  const [isCreating, setIsCreating] = useState(false);
 
   const handleSearch = async () => {
     if (!searchCode.trim()) {
@@ -50,31 +53,48 @@ export default function CustomerModal({
     }
 
     setIsSearching(true);
+    setFoundCustomer(null);
+    
     try {
-      const customers = await posService.getCustomers();
-      const found = customers.find(
-        (c: Customer) => c.identification === searchCode || c.nit === searchCode
+      console.log('Buscando cliente por DNI/NIT:', searchCode);
+      
+      // Buscar SOLO por identificación exacta (DNI/NIT/CC)
+      const allCustomers = await posService.getCustomers();
+      console.log('Total clientes obtenidos:', allCustomers.length);
+      
+      const exactMatch = allCustomers.find(
+        (c: Customer) => 
+          c.identification === searchCode.trim() || 
+          c.nit === searchCode.trim()
       );
 
-      if (found) {
-        setFoundCustomer(found);
+      if (exactMatch) {
+        console.log('Cliente encontrado:', exactMatch);
+        setFoundCustomer(exactMatch);
       } else {
-        Alert.alert('No Encontrado', 'No existe un cliente con ese DNI/NIT');
+        console.log('No se encontró cliente con ese DNI/NIT');
+        Alert.alert('No Encontrado', 'Cliente no encontrado');
         setFoundCustomer(null);
       }
     } catch (error: any) {
-      Alert.alert('Error', 'No se pudo realizar la búsqueda');
+      console.error('Error buscando clientes:', error);
+      Alert.alert('Error', 'Error al buscar cliente');
     } finally {
       setIsSearching(false);
     }
   };
 
   const handleSelectFound = () => {
-    if (foundCustomer) {
+    console.log('handleSelectFound llamado, foundCustomer:', foundCustomer);
+    if (foundCustomer && foundCustomer.name && foundCustomer.id) {
+      console.log('Seleccionando cliente:', foundCustomer.name, foundCustomer.id);
       onSelectCustomer(foundCustomer.name, foundCustomer.id);
       setFoundCustomer(null);
       setSearchCode('');
       onClose();
+      console.log('Modal cerrado');
+    } else {
+      Alert.alert('Error', 'Seleccione un cliente válido');
     }
   };
 
@@ -84,7 +104,9 @@ export default function CustomerModal({
       return;
     }
 
+    setIsCreating(true);
     try {
+      console.log('Creando cliente:', newCustomer);
       const created = await posService.createCustomer({
         name: newCustomer.name,
         identification: newCustomer.identification,
@@ -95,7 +117,9 @@ export default function CustomerModal({
         city: newCustomer.city,
       });
       
-      Alert.alert('Éxito', `Cliente ${newCustomer.name} creado exitosamente`, [
+      console.log('Cliente creado:', created);
+      
+      Alert.alert('Éxito', 'Cliente creado exitosamente', [
         {
           text: 'OK',
           onPress: () => {
@@ -114,13 +138,11 @@ export default function CustomerModal({
         },
       ]);
     } catch (error: any) {
-      Alert.alert('Error', 'No se pudo crear el cliente');
+      console.error('Error creando cliente:', error);
+      Alert.alert('Error', 'Error al crear cliente');
+    } finally {
+      setIsCreating(false);
     }
-  };
-
-  const handleUseDefault = () => {
-    onSelectCustomer('Consumidor Final', 1);
-    onClose();
   };
 
   return (
@@ -134,50 +156,21 @@ export default function CustomerModal({
           <View style={{ width: 40 }} />
         </View>
 
-        {/* Current Customer Badge */}
-        <View style={styles.currentCustomer}>
-          <Ionicons name="person" size={20} color={Colors.primary} />
-          <Text style={styles.currentCustomerText}>{currentCustomer}</Text>
-          <TouchableOpacity onPress={handleUseDefault} style={styles.defaultButton}>
-            <Text style={styles.defaultButtonText}>Usar "Consumidor Final"</Text>
-          </TouchableOpacity>
-        </View>
-
         {/* Tabs */}
         <View style={styles.tabs}>
           <TouchableOpacity
             style={[styles.tab, activeTab === 'search' && styles.tabActive]}
             onPress={() => setActiveTab('search')}
           >
-            <Ionicons
-              name="search"
-              size={20}
-              color={activeTab === 'search' ? Colors.primary : Colors.textLight}
-            />
-            <Text
-              style={[
-                styles.tabText,
-                activeTab === 'search' && styles.tabTextActive,
-              ]}
-            >
-              Buscar Cliente
+            <Text style={[styles.tabText, activeTab === 'search' && styles.tabTextActive]}>
+              Cliente
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tab, activeTab === 'create' && styles.tabActive]}
             onPress={() => setActiveTab('create')}
           >
-            <Ionicons
-              name="add-circle"
-              size={20}
-              color={activeTab === 'create' ? Colors.primary : Colors.textLight}
-            />
-            <Text
-              style={[
-                styles.tabText,
-                activeTab === 'create' && styles.tabTextActive,
-              ]}
-            >
+            <Text style={[styles.tabText, activeTab === 'create' && styles.tabTextActive]}>
               Nuevo Cliente
             </Text>
           </TouchableOpacity>
@@ -186,23 +179,26 @@ export default function CustomerModal({
         <ScrollView style={styles.content}>
           {activeTab === 'search' ? (
             <View style={styles.searchTab}>
-              <Text style={styles.label}>DNI/NIT del Cliente</Text>
+              <Text style={styles.label}>Buscar Cliente</Text>
               <View style={styles.searchRow}>
                 <TextInput
                   style={[styles.input, { flex: 1 }]}
-                  placeholder="Ingresa el DNI o NIT"
+                  placeholder="DNI o NIT del cliente"
                   placeholderTextColor={Colors.textLight}
                   value={searchCode}
                   onChangeText={setSearchCode}
+                  onSubmitEditing={handleSearch}
+                  returnKeyType="search"
                   keyboardType="numeric"
                 />
                 <TouchableOpacity
                   style={styles.searchButton}
                   onPress={handleSearch}
                   disabled={isSearching}
+                  activeOpacity={0.7}
                 >
                   {isSearching ? (
-                    <Text style={styles.searchButtonText}>...</Text>
+                    <ActivityIndicator size="small" color={Colors.white} />
                   ) : (
                     <Ionicons name="search" size={20} color={Colors.white} />
                   )}
@@ -211,30 +207,53 @@ export default function CustomerModal({
 
               {foundCustomer && (
                 <View style={styles.foundCustomer}>
-                  <Text style={styles.foundTitle}>Cliente Encontrado</Text>
+                  <View style={styles.foundHeader}>
+                    <Ionicons name="checkmark-circle" size={24} color={Colors.success} />
+                    <Text style={styles.foundTitle}>Cliente Encontrado</Text>
+                  </View>
+                  
                   <View style={styles.foundDetails}>
                     <Text style={styles.foundName}>{foundCustomer.name}</Text>
-                    <Text style={styles.foundInfo}>DNI: {foundCustomer.identification}</Text>
+                    
+                    <View style={styles.infoRow}>
+                      <Ionicons name="card-outline" size={16} color={Colors.textLight} />
+                      <Text style={styles.foundInfo}>
+                        {foundCustomer.identification || foundCustomer.nit}
+                      </Text>
+                    </View>
+                    
                     {foundCustomer.phone && (
-                      <Text style={styles.foundInfo}>Tel: {foundCustomer.phone}</Text>
+                      <View style={styles.infoRow}>
+                        <Ionicons name="call-outline" size={16} color={Colors.textLight} />
+                        <Text style={styles.foundInfo}>{foundCustomer.phone}</Text>
+                      </View>
                     )}
+                    
                     {foundCustomer.email && (
-                      <Text style={styles.foundInfo}>Email: {foundCustomer.email}</Text>
+                      <View style={styles.infoRow}>
+                        <Ionicons name="mail-outline" size={16} color={Colors.textLight} />
+                        <Text style={styles.foundInfo}>{foundCustomer.email}</Text>
+                      </View>
+                    )}
+                    
+                    {foundCustomer.address && (
+                      <View style={styles.infoRow}>
+                        <Ionicons name="location-outline" size={16} color={Colors.textLight} />
+                        <Text style={styles.foundInfo}>{foundCustomer.address}</Text>
+                      </View>
                     )}
                   </View>
-                  <TouchableOpacity style={styles.selectButton} onPress={handleSelectFound}>
+                  
+                  <TouchableOpacity 
+                    style={styles.selectButton}
+                    onPress={handleSelectFound}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="checkmark-circle" size={20} color={Colors.white} />
                     <Text style={styles.selectButtonText}>Seleccionar Cliente</Text>
                   </TouchableOpacity>
                 </View>
               )}
-
-              <View style={styles.hint}>
-                <Ionicons name="information-circle" size={20} color={Colors.info} />
-                <Text style={styles.hintText}>
-                  Busca clientes existentes por su DNI o NIT para cargar su información
-                  automáticamente.
-                </Text>
-              </View>
             </View>
           ) : (
             <View style={styles.createTab}>
@@ -261,6 +280,7 @@ export default function CustomerModal({
                       newCustomer.identificationType === type && styles.idTypeButtonActive,
                     ]}
                     onPress={() => setNewCustomer({ ...newCustomer, identificationType: type })}
+                    activeOpacity={0.7}
                   >
                     <Text
                       style={[
@@ -282,9 +302,7 @@ export default function CustomerModal({
                 placeholder="Número de identificación"
                 placeholderTextColor={Colors.textLight}
                 value={newCustomer.identification}
-                onChangeText={(text) =>
-                  setNewCustomer({ ...newCustomer, identification: text })
-                }
+                onChangeText={(text) => setNewCustomer({ ...newCustomer, identification: text })}
                 keyboardType="numeric"
               />
 
@@ -327,9 +345,20 @@ export default function CustomerModal({
                 onChangeText={(text) => setNewCustomer({ ...newCustomer, city: text })}
               />
 
-              <TouchableOpacity style={styles.createButton} onPress={handleCreateCustomer}>
-                <Ionicons name="add-circle" size={20} color={Colors.white} />
-                <Text style={styles.createButtonText}>Crear Cliente</Text>
+              <TouchableOpacity 
+                style={[styles.createButton, isCreating && styles.createButtonDisabled]}
+                onPress={handleCreateCustomer}
+                disabled={isCreating}
+                activeOpacity={0.7}
+              >
+                {isCreating ? (
+                  <ActivityIndicator size="small" color={Colors.white} />
+                ) : (
+                  <>
+                    <Ionicons name="person-add" size={20} color={Colors.white} />
+                    <Text style={styles.createButtonText}>Crear Cliente</Text>
+                  </>
+                )}
               </TouchableOpacity>
             </View>
           )}
@@ -438,17 +467,7 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    fontSize: FontSize.md,
-    color: Colors.text,
-    backgroundColor: Colors.white,
-  },
-  searchButton: {
-    backgroundColor: Colors.primary,
-    borderRadius: BorderRadius.md,
-    width: 50,
+    paddingHorizontal: Spacing.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -461,8 +480,17 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderRadius: BorderRadius.lg,
     padding: Spacing.lg,
+    marginTop: Spacing.md,
     gap: Spacing.md,
     ...Shadow.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  foundHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginBottom: Spacing.xs,
   },
   foundTitle: {
     fontSize: FontSize.lg,
@@ -470,12 +498,33 @@ const styles = StyleSheet.create({
     color: Colors.success,
   },
   foundDetails: {
-    gap: Spacing.xs,
+    gap: Spacing.sm,
   },
   foundName: {
-    fontSize: FontSize.lg,
-    fontWeight: FontWeight.semibold,
+    fontSize: FontSize.xl,
+    fontWeight: FontWeight.bold,
     color: Colors.text,
+    marginBottom: Spacing.xs,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  foundInfo: {
+    fontSize: FontSize.md,
+    color: Colors.textLight,
+    flex: 1,
+  },
+  selectButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    marginTop: Spacing.sm
   },
   foundInfo: {
     fontSize: FontSize.sm,
@@ -506,6 +555,38 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     color: Colors.textLight,
     lineHeight: 20,
+  },
+  resultsContainer: {
+    marginTop: Spacing.md,
+    gap: Spacing.sm,
+  },
+  resultsTitle: {
+    fontSize: FontSize.md,
+    fontWeight: FontWeight.semibold,
+    color: Colors.text,
+    marginBottom: Spacing.xs,
+  },
+  resultItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    ...Shadow.sm,
+  },
+  resultInfo: {
+    flex: 1,
+    gap: Spacing.xs,
+  },
+  resultName: {
+    fontSize: FontSize.md,
+    fontWeight: FontWeight.semibold,
+    color: Colors.text,
+  },
+  resultDetail: {
+    fontSize: FontSize.sm,
+    color: Colors.textLight,
   },
   createTab: {
     padding: Spacing.lg,
@@ -543,8 +624,11 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     backgroundColor: Colors.success,
     borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    marginTop: Spacing.md,
+    padding: Spacing.lg,
+    marginTop: Spacing.xl,
+  },
+  createButtonDisabled: {
+    opacity: 0.5,
   },
   createButtonText: {
     fontSize: FontSize.md,

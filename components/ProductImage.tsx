@@ -62,8 +62,13 @@ export function ProductImage({
           throw new Error('No image URL in response');
         }
       } else {
-        // Direct image response - use the URL with auth header
-        setImageSrc(imageUrl);
+        // Direct image response - convert to base64 for Android compatibility
+        const blob = await response.blob();
+        const reader = new (FileReader as any)();
+        reader.readAsDataURL(blob);
+        reader.onloadend = () => {
+          setImageSrc(reader.result);
+        };
       }
 
       setLoading(false);

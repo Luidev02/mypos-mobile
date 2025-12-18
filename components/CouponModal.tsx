@@ -4,8 +4,11 @@ import type { Coupon } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import {
+    ActivityIndicator,
     Alert,
+    KeyboardAvoidingView,
     Modal,
+    Platform,
     ScrollView,
     StyleSheet,
     Text,
@@ -27,44 +30,53 @@ export default function CouponModal({ visible, onClose, onApplyCoupon }: CouponM
 
   const handleSearch = async () => {
     if (!couponCode.trim()) {
-      Alert.alert('Error', 'Ingresa un código de cupón');
+      Alert.alert('Error', 'Por favor ingrese código');
       return;
     }
 
     setIsSearching(true);
     try {
-      const coupon = await posService.validateCoupon(couponCode.toUpperCase());
+      const couponData = await posService.validateCoupon(couponCode.toUpperCase().trim());
 
-      // Validaciones según documentación web
-      if (!coupon.is_active) {
-        Alert.alert('Cupón Inactivo', 'Este cupón no está activo');
+      if (!couponData || !couponData.id) {
+        Alert.alert('No encontrado', 'Cupón no encontrado');
         setFoundCoupon(null);
+        setIsSearching(false);
         return;
       }
 
-      if (coupon.valid_until) {
-        const expirationDate = new Date(coupon.valid_until);
+      // Verificar si el cupón está activo
+      if (!couponData.is_active) {
+        Alert.alert('Cupón inactivo', 'Este cupón no está activo');
+        setFoundCoupon(null);
+        setIsSearching(false);
+        return;
+      }
+
+      // Verificar si el cupón ha expirado
+      if (couponData.valid_until) {
+        const expirationDate = new Date(couponData.valid_until);
         const now = new Date();
         if (expirationDate < now) {
-          Alert.alert('Cupón Expirado', 'Este cupón ha expirado');
+          Alert.alert('Cupón expirado', 'Este cupón ha expirado');
           setFoundCoupon(null);
+          setIsSearching(false);
           return;
         }
       }
 
-      if (
-        coupon.usage_limit &&
-        coupon.current_usage &&
-        coupon.current_usage >= coupon.usage_limit
-      ) {
-        Alert.alert('Límite Alcanzado', 'Este cupón ha alcanzado su límite de uso');
+      // Verificar límite de uso
+      if (couponData.usage_limit && couponData.current_usage && couponData.current_usage >= couponData.usage_limit) {
+        Alert.alert('Límite alcanzado', 'Este cupón ha alcanzado su límite de uso');
         setFoundCoupon(null);
+        setIsSearching(false);
         return;
       }
 
-      setFoundCoupon(coupon);
+      setFoundCoupon(couponData);
     } catch (error: any) {
-      Alert.alert('Cupón No Encontrado', 'No existe un cupón con ese código');
+      console.error('Error buscando cupón:', error);
+      Alert.alert('Error', 'Cupón no encontrado o inválido');
       setFoundCoupon(null);
     } finally {
       setIsSearching(false);
@@ -72,49 +84,55 @@ export default function CouponModal({ visible, onClose, onApplyCoupon }: CouponM
   };
 
   const handleApply = () => {
-    if (foundCoupon) {
-      onApplyCoupon(foundCoupon.discount, foundCoupon.id, foundCoupon.code);
-      setCouponCode('');
-      setFoundCoupon(null);
-      onClose();
+    if (!foundCoupon || !foundCoupon.id) {
+      Alert.alert('Error', 'Por favor busque un cupón válido primero');
+      return;
     }
-  };
-
-  const handleClear = () => {
+    // Pasar el descuento y el ID del cupón
+    onApplyCoupon(foundCoupon.discount, foundCoupon.id, foundCoupon.code);
+    // Limpiar estado
     setCouponCode('');
     setFoundCoupon(null);
+    onClose();
+  };
+
+  const handleClose = () => {
+    setCouponCode('');
+    setFoundCoupon(null);
+    onClose();
   };
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
-      <View style={styles.container}>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.container}
+      >
         <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+          <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
             <Ionicons name="close" size={28} color={Colors.text} />
           </TouchableOpacity>
-          <Text style={styles.title}>Cupones de Descuento</Text>
+          <Text style={styles.title}>🎟️ Cupón</Text>
           <View style={{ width: 40 }} />
         </View>
 
-        <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-          <View style={styles.banner}>
-            <Ionicons name="pricetag" size={48} color={Colors.primary} />
-            <Text style={styles.bannerTitle}>¿Tienes un cupón?</Text>
-            <Text style={styles.bannerText}>
-              Ingresa el código para aplicar descuentos especiales a tu compra
-            </Text>
-          </View>
-
+        <ScrollView 
+          style={styles.content} 
+          contentContainerStyle={styles.contentContainer}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Buscador */}
           <View style={styles.searchSection}>
-            <Text style={styles.label}>Código del Cupón</Text>
+            <Text style={styles.label}>Buscar Código de Cupón</Text>
             <View style={styles.searchRow}>
               <TextInput
                 style={[styles.input, { flex: 1 }]}
-                placeholder="Ej: VERANO2024"
+                placeholder="Buscar código de cupón"
                 placeholderTextColor={Colors.textLight}
                 value={couponCode}
-                onChangeText={(text) => setCouponCode(text.toUpperCase())}
+                onChangeText={setCouponCode}
                 autoCapitalize="characters"
+                editable={!isSearching}
               />
               <TouchableOpacity
                 style={styles.searchButton}
@@ -122,92 +140,54 @@ export default function CouponModal({ visible, onClose, onApplyCoupon }: CouponM
                 disabled={isSearching}
               >
                 {isSearching ? (
-                  <Text style={styles.searchButtonText}>...</Text>
+                  <ActivityIndicator size="small" color={Colors.white} />
                 ) : (
-                  <Ionicons name="search" size={20} color={Colors.white} />
+                  <>
+                    <Ionicons name="search" size={20} color={Colors.white} />
+                    <Text style={styles.searchButtonText}>Buscar</Text>
+                  </>
                 )}
               </TouchableOpacity>
             </View>
           </View>
 
-          {foundCoupon && (
-            <View style={styles.couponCard}>
-              <View style={styles.couponHeader}>
-                <Ionicons name="checkmark-circle" size={32} color={Colors.success} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.couponTitle}>Cupón Válido</Text>
-                  <Text style={styles.couponCode}>{foundCoupon.code}</Text>
-                </View>
+          {/* Información del cupón */}
+          <View style={styles.couponInfoCard}>
+            <View style={styles.couponInfoRow}>
+              <View style={styles.couponInfoLeft}>
+                <Text style={styles.couponInfoLabel}>Nombre del Cupón</Text>
+                <Text style={styles.couponInfoValue}>
+                  {foundCoupon?.name || foundCoupon?.description || 'Sin información'}
+                </Text>
               </View>
-
-              <View style={styles.couponBody}>
-                <Text style={styles.couponName}>{foundCoupon.name}</Text>
-                {foundCoupon.description && (
-                  <Text style={styles.couponDescription}>{foundCoupon.description}</Text>
-                )}
-
-                <View style={styles.couponDetails}>
-                  <View style={styles.discountBadge}>
-                    <Text style={styles.discountValue}>{foundCoupon.discount}%</Text>
-                    <Text style={styles.discountLabel}>de descuento</Text>
-                  </View>
-
-                  <View style={styles.couponInfo}>
-                    {foundCoupon.valid_until && (
-                      <View style={styles.infoRow}>
-                        <Ionicons name="calendar-outline" size={16} color={Colors.textLight} />
-                        <Text style={styles.infoText}>
-                          Válido hasta:{' '}
-                          {new Date(foundCoupon.valid_until).toLocaleDateString('es-CO')}
-                        </Text>
-                      </View>
-                    )}
-                    {foundCoupon.usage_limit && (
-                      <View style={styles.infoRow}>
-                        <Ionicons name="people-outline" size={16} color={Colors.textLight} />
-                        <Text style={styles.infoText}>
-                          Usos: {foundCoupon.current_usage} / {foundCoupon.usage_limit}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-              </View>
-
-              <View style={styles.couponActions}>
-                <TouchableOpacity style={styles.clearButton} onPress={handleClear}>
-                  <Text style={styles.clearButtonText}>Limpiar</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.applyButton} onPress={handleApply}>
-                  <Ionicons name="checkmark" size={20} color={Colors.white} />
-                  <Text style={styles.applyButtonText}>Aplicar Cupón</Text>
-                </TouchableOpacity>
+              <View style={styles.couponInfoRight}>
+                <Text style={styles.couponInfoLabel}>Descuento</Text>
+                <Text style={styles.discountValue}>
+                  {foundCoupon?.discount ? `${foundCoupon.discount}%` : '0%'}
+                </Text>
               </View>
             </View>
-          )}
+            
+            {foundCoupon?.code && (
+              <View style={styles.couponCodeSection}>
+                <Text style={styles.couponCodeLabel}>Código: </Text>
+                <Text style={styles.couponCodeValue}>{foundCoupon.code}</Text>
+              </View>
+            )}
+          </View>
 
-          <View style={styles.hint}>
-            <Ionicons name="information-circle" size={20} color={Colors.info} />
-            <Text style={styles.hintText}>
-              Los cupones pueden ofrecer descuentos porcentuales o montos fijos. Verifica la
-              fecha de expiración y disponibilidad antes de aplicar.
+          {/* Botón usar cupón */}
+          <TouchableOpacity
+            style={[styles.applyButton, !foundCoupon?.id && styles.applyButtonDisabled]}
+            onPress={handleApply}
+            disabled={!foundCoupon?.id}
+          >
+            <Text style={styles.applyButtonText}>
+              {foundCoupon?.id ? '✓ Usar Cupón' : 'Busque un cupón primero'}
             </Text>
-          </View>
-
-          {/* Ejemplo de cupones disponibles */}
-          <View style={styles.availableSection}>
-            <Text style={styles.availableTitle}>💡 Cupones de Ejemplo</Text>
-            <View style={styles.exampleCoupon}>
-              <Text style={styles.exampleCode}>VERANO2024</Text>
-              <Text style={styles.exampleDesc}>15% de descuento</Text>
-            </View>
-            <View style={styles.exampleCoupon}>
-              <Text style={styles.exampleCode}>PRIMERACOMPRA</Text>
-              <Text style={styles.exampleDesc}>$10.000 de descuento</Text>
-            </View>
-          </View>
+          </TouchableOpacity>
         </ScrollView>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -232,7 +212,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   title: {
-    fontSize: FontSize.xl,
+    fontSize: FontSize.xxl,
     fontWeight: FontWeight.bold,
     color: Colors.text,
   },
@@ -243,24 +223,6 @@ const styles = StyleSheet.create({
     padding: Spacing.lg,
     gap: Spacing.lg,
   },
-  banner: {
-    backgroundColor: Colors.white,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.xl,
-    alignItems: 'center',
-    gap: Spacing.md,
-    ...Shadow.sm,
-  },
-  bannerTitle: {
-    fontSize: FontSize.xl,
-    fontWeight: FontWeight.bold,
-    color: Colors.text,
-  },
-  bannerText: {
-    fontSize: FontSize.md,
-    color: Colors.textLight,
-    textAlign: 'center',
-  },
   searchSection: {
     gap: Spacing.sm,
   },
@@ -268,181 +230,110 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md,
     fontWeight: FontWeight.semibold,
     color: Colors.text,
+    marginBottom: Spacing.xs,
   },
   searchRow: {
     flexDirection: 'row',
     gap: Spacing.sm,
+    alignItems: 'stretch',
   },
   input: {
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: Colors.border,
     borderRadius: BorderRadius.md,
     padding: Spacing.md,
     fontSize: FontSize.lg,
-    fontWeight: FontWeight.bold,
     color: Colors.text,
     backgroundColor: Colors.white,
+    height: 55,
   },
   searchButton: {
     backgroundColor: Colors.primary,
     borderRadius: BorderRadius.md,
-    width: 50,
+    paddingHorizontal: Spacing.lg,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
+    gap: Spacing.xs,
+    minWidth: 100,
   },
   searchButtonText: {
     color: Colors.white,
-    fontSize: FontSize.lg,
-    fontWeight: FontWeight.bold,
-  },
-  couponCard: {
-    backgroundColor: Colors.white,
-    borderRadius: BorderRadius.lg,
-    overflow: 'hidden',
-    ...Shadow.md,
-  },
-  couponHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    padding: Spacing.lg,
-    backgroundColor: Colors.successLight,
-  },
-  couponTitle: {
-    fontSize: FontSize.lg,
-    fontWeight: FontWeight.bold,
-    color: Colors.success,
-  },
-  couponCode: {
-    fontSize: FontSize.sm,
-    color: Colors.textLight,
-    fontFamily: 'monospace',
-  },
-  couponBody: {
-    padding: Spacing.lg,
-    gap: Spacing.md,
-  },
-  couponName: {
-    fontSize: FontSize.lg,
-    fontWeight: FontWeight.semibold,
-    color: Colors.text,
-  },
-  couponDescription: {
-    fontSize: FontSize.sm,
-    color: Colors.textLight,
-  },
-  couponDetails: {
-    flexDirection: 'row',
-    gap: Spacing.md,
-  },
-  discountBadge: {
-    backgroundColor: Colors.primary,
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 100,
-  },
-  discountValue: {
-    fontSize: FontSize.xxl,
-    fontWeight: FontWeight.bold,
-    color: Colors.white,
-  },
-  discountLabel: {
-    fontSize: FontSize.xs,
-    color: Colors.white,
-  },
-  couponInfo: {
-    flex: 1,
-    gap: Spacing.xs,
-    justifyContent: 'center',
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-  },
-  infoText: {
-    fontSize: FontSize.sm,
-    color: Colors.textLight,
-  },
-  couponActions: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-    padding: Spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
-  clearButton: {
-    flex: 1,
-    padding: Spacing.md,
-    borderRadius: BorderRadius.md,
-    backgroundColor: Colors.background,
-    alignItems: 'center',
-  },
-  clearButtonText: {
     fontSize: FontSize.md,
     fontWeight: FontWeight.semibold,
-    color: Colors.text,
   },
-  applyButton: {
-    flex: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.xs,
-    padding: Spacing.md,
-    borderRadius: BorderRadius.md,
-    backgroundColor: Colors.success,
-  },
-  applyButtonText: {
-    fontSize: FontSize.md,
-    fontWeight: FontWeight.semibold,
-    color: Colors.white,
-  },
-  hint: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-    padding: Spacing.md,
-    backgroundColor: Colors.white,
-    borderRadius: BorderRadius.md,
-    borderLeftWidth: 4,
-    borderLeftColor: Colors.info,
-  },
-  hintText: {
-    flex: 1,
-    fontSize: FontSize.sm,
-    color: Colors.textLight,
-    lineHeight: 20,
-  },
-  availableSection: {
-    backgroundColor: Colors.white,
+  couponInfoCard: {
+    backgroundColor: '#FAF7F4',
+    borderWidth: 2,
+    borderColor: '#D4C4B0',
     borderRadius: BorderRadius.lg,
     padding: Spacing.lg,
-    gap: Spacing.sm,
+    marginTop: Spacing.md,
   },
-  availableTitle: {
-    fontSize: FontSize.md,
-    fontWeight: FontWeight.semibold,
-    color: Colors.text,
-    marginBottom: Spacing.xs,
-  },
-  exampleCoupon: {
+  couponInfoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: Spacing.md,
-    backgroundColor: Colors.background,
-    borderRadius: BorderRadius.md,
+    gap: Spacing.md,
   },
-  exampleCode: {
+  couponInfoLeft: {
+    flex: 1,
+    gap: Spacing.xs,
+  },
+  couponInfoRight: {
+    alignItems: 'flex-end',
+    gap: Spacing.xs,
+  },
+  couponInfoLabel: {
     fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
+    color: '#6B4423',
+  },
+  couponInfoValue: {
+    fontSize: FontSize.xl,
     fontWeight: FontWeight.bold,
-    color: Colors.primary,
-    fontFamily: 'monospace',
+    color: '#3d2713',
   },
-  exampleDesc: {
+  discountValue: {
+    fontSize: 32,
+    fontWeight: FontWeight.bold,
+    color: '#6B4423',
+  },
+  couponCodeSection: {
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: 2,
+    borderTopColor: '#E5DDD5',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  couponCodeLabel: {
     fontSize: FontSize.sm,
-    color: Colors.textLight,
+    fontWeight: FontWeight.semibold,
+    color: '#6B4423',
+  },
+  couponCodeValue: {
+    fontSize: FontSize.md,
+    fontWeight: FontWeight.bold,
+    color: '#3d2713',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  applyButton: {
+    backgroundColor: '#6B4423',
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    alignItems: 'center',
+    marginTop: Spacing.lg,
+    ...Shadow.md,
+    height: 55,
+    justifyContent: 'center',
+  },
+  applyButtonDisabled: {
+    backgroundColor: Colors.textLight,
+    opacity: 0.4,
+  },
+  applyButtonText: {
+    fontSize: FontSize.lg,
+    fontWeight: FontWeight.bold,
+    color: Colors.white,
   },
 });

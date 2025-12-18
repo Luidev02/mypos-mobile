@@ -9,13 +9,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
-  FlatList,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    FlatList,
+    KeyboardAvoidingView,
+    Platform,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -228,95 +230,101 @@ export default function CartScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color={Colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Carrito ({items.length})</Text>
-        <TouchableOpacity onPress={clearCart}>
-          <Ionicons name="trash-outline" size={24} color={Colors.error} />
-        </TouchableOpacity>
-      </View>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={24} color={Colors.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Carrito ({items.length})</Text>
+          <TouchableOpacity onPress={clearCart}>
+            <Ionicons name="trash-outline" size={24} color={Colors.error} />
+          </TouchableOpacity>
+        </View>
 
-      <FlatList
-        data={items}
-        renderItem={renderCartItem}
-        keyExtractor={(item) => item.product_id.toString()}
-        contentContainerStyle={styles.cartList}
-      />
+        <FlatList
+          data={items}
+          renderItem={renderCartItem}
+          keyExtractor={(item) => item.product_id.toString()}
+          contentContainerStyle={styles.cartList}
+          keyboardShouldPersistTaps="handled"
+        />
+        
+        <View style={styles.summary}>
+          {/* Información del turno activo */}
+          {activeShift && (
+            <View style={styles.shiftInfo}>
+              <Ionicons name="checkmark-circle" size={20} color={Colors.success} />
+              <View style={styles.shiftInfoText}>
+                <Text style={styles.shiftInfoLabel}>Turno Activo</Text>
+                <Text style={styles.shiftInfoValue}>
+                  {activeShift.cash_register_name || `Caja #${activeShift.cash_register_id}`}
+                </Text>
+              </View>
+            </View>
+          )}
+          {!activeShift && (
+            <View style={[styles.shiftInfo, styles.shiftInfoWarning]}>
+              <Ionicons name="warning" size={20} color={Colors.warning} />
+              <View style={styles.shiftInfoText}>
+                <Text style={styles.shiftInfoLabel}>Sin Turno Activo</Text>
+                <Text style={styles.shiftInfoValue}>Debes abrir un turno para vender</Text>
+              </View>
+            </View>
+          )}
 
-      <View style={styles.summary}>
-        {/* Información del turno activo */}
-        {activeShift && (
-          <View style={styles.shiftInfo}>
-            <Ionicons name="checkmark-circle" size={20} color={Colors.success} />
-            <View style={styles.shiftInfoText}>
-              <Text style={styles.shiftInfoLabel}>Turno Activo</Text>
-              <Text style={styles.shiftInfoValue}>
-                {activeShift.cash_register_name || `Caja #${activeShift.cash_register_id}`}
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>Subtotal:</Text>
+            <Text style={styles.summaryValue}>{formatCurrency(subtotal)}</Text>
+          </View>
+          {discount > 0 && (
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Descuento ({discount}%):</Text>
+              <Text style={[styles.summaryValue, { color: Colors.success }]}>
+                -{formatCurrency(discountAmount)}
               </Text>
             </View>
-          </View>
-        )}
-        {!activeShift && (
-          <View style={[styles.shiftInfo, styles.shiftInfoWarning]}>
-            <Ionicons name="warning" size={20} color={Colors.warning} />
-            <View style={styles.shiftInfoText}>
-              <Text style={styles.shiftInfoLabel}>Sin Turno Activo</Text>
-              <Text style={styles.shiftInfoValue}>Debes abrir un turno para vender</Text>
-            </View>
-          </View>
-        )}
-
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Subtotal:</Text>
-          <Text style={styles.summaryValue}>{formatCurrency(subtotal)}</Text>
-        </View>
-        {discount > 0 && (
+          )}
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Descuento ({discount}%):</Text>
-            <Text style={[styles.summaryValue, { color: Colors.success }]}>
-              -{formatCurrency(discountAmount)}
+            <Text style={styles.summaryLabel}>IVA (19%):</Text>
+            <Text style={styles.summaryValue}>{formatCurrency(tax)}</Text>
+          </View>
+          <View style={[styles.summaryRow, styles.summaryTotal]}>
+            <Text style={styles.summaryTotalLabel}>Total:</Text>
+            <Text style={styles.summaryTotalValue}>{formatCurrency(total)}</Text>
+          </View>
+
+          {/* Mostrar info de venta */}
+          {(customer !== 'Consumidor Final' || orderType || saleName) && (
+            <View style={styles.saleInfo}>
+              {customer !== 'Consumidor Final' && (
+                <Text style={styles.saleInfoText}>Cliente: {customer}</Text>
+              )}
+              {orderType && (
+                <Text style={styles.saleInfoText}>Tipo: {orderType}</Text>
+              )}
+              {saleName && (
+                <Text style={styles.saleInfoText}>Venta: {saleName}</Text>
+              )}
+              {couponCode && (
+                <Text style={styles.saleInfoText}>Cupón: {couponCode}</Text>
+              )}
+            </View>
+          )}
+
+          <TouchableOpacity 
+            style={[styles.checkoutButton, !activeShift && styles.checkoutButtonDisabled]}
+            onPress={() => setShowPaymentModal(true)}
+            disabled={!activeShift}
+          >
+            <Text style={styles.checkoutButtonText}>
+              {activeShift ? 'Procesar Pago' : 'Abre un Turno para Vender'}
             </Text>
-          </View>
-        )}
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>IVA (19%):</Text>
-          <Text style={styles.summaryValue}>{formatCurrency(tax)}</Text>
+          </TouchableOpacity>
         </View>
-        <View style={[styles.summaryRow, styles.summaryTotal]}>
-          <Text style={styles.summaryTotalLabel}>Total:</Text>
-          <Text style={styles.summaryTotalValue}>{formatCurrency(total)}</Text>
-        </View>
-
-        {/* Mostrar info de venta */}
-        {(customer !== 'Consumidor Final' || orderType || saleName) && (
-          <View style={styles.saleInfo}>
-            {customer !== 'Consumidor Final' && (
-              <Text style={styles.saleInfoText}>Cliente: {customer}</Text>
-            )}
-            {orderType && (
-              <Text style={styles.saleInfoText}>Tipo: {orderType}</Text>
-            )}
-            {saleName && (
-              <Text style={styles.saleInfoText}>Venta: {saleName}</Text>
-            )}
-            {couponCode && (
-              <Text style={styles.saleInfoText}>Cupón: {couponCode}</Text>
-            )}
-          </View>
-        )}
-
-        <TouchableOpacity 
-          style={[styles.checkoutButton, !activeShift && styles.checkoutButtonDisabled]}
-          onPress={() => setShowPaymentModal(true)}
-          disabled={!activeShift}
-        >
-          <Text style={styles.checkoutButtonText}>
-            {activeShift ? 'Procesar Pago' : 'Abre un Turno para Vender'}
-          </Text>
-        </TouchableOpacity>
-      </View>
 
       {showPaymentModal && (
         <View style={styles.modalOverlay}>
@@ -513,6 +521,7 @@ export default function CartScreen() {
           </View>
         </View>
       )}
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
