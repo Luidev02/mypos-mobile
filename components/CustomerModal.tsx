@@ -7,6 +7,7 @@ import {
     ActivityIndicator,
     Alert,
     Modal,
+    SafeAreaView,
     ScrollView,
     StyleSheet,
     Text,
@@ -147,7 +148,7 @@ export default function CustomerModal({
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
             <Ionicons name="close" size={28} color={Colors.text} />
@@ -176,7 +177,11 @@ export default function CustomerModal({
           </TouchableOpacity>
         </View>
 
-        <ScrollView style={styles.content}>
+        <ScrollView 
+          style={styles.content}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
           {activeTab === 'search' ? (
             <View style={styles.searchTab}>
               <Text style={styles.label}>Buscar Cliente</Text>
@@ -363,7 +368,7 @@ export default function CustomerModal({
             </View>
           )}
         </ScrollView>
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 }
@@ -448,8 +453,11 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
-  searchTab: {
+  scrollContent: {
     padding: Spacing.lg,
+    paddingBottom: Spacing.xl,
+  },
+  searchTab: {
     gap: Spacing.md,
   },
   label: {
@@ -589,7 +597,6 @@ const styles = StyleSheet.create({
     color: Colors.textLight,
   },
   createTab: {
-    padding: Spacing.lg,
     gap: Spacing.md,
   },
   idTypeRow: {

@@ -8,6 +8,7 @@ import {
     ActivityIndicator,
     Alert,
     Modal,
+    SafeAreaView,
     ScrollView,
     StyleSheet,
     Text,
@@ -99,17 +100,20 @@ export default function CloseShiftModal({
   const difference = finalCashReal - expectedCash;
 
   return (
-    <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <View style={styles.modalContainer}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Cerrar Turno</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Ionicons name="close" size={24} color={Colors.text} />
-            </TouchableOpacity>
-          </View>
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Cerrar Turno</Text>
+          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+            <Ionicons name="close" size={24} color={Colors.text} />
+          </TouchableOpacity>
+        </View>
 
-          <ScrollView style={styles.content}>
+        <ScrollView 
+          style={styles.content}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
             {/* Información del turno */}
             <View style={styles.shiftInfo}>
               <View style={styles.shiftInfoHeader}>
@@ -216,54 +220,49 @@ export default function CloseShiftModal({
                 Una vez cerrado el turno, no podrá realizar más ventas hasta abrir uno nuevo.
               </Text>
             </View>
-          </ScrollView>
+        </ScrollView>
 
-          <View style={styles.footer}>
-            <TouchableOpacity
-              style={[styles.button, styles.cancelButton]}
-              onPress={onClose}
-              disabled={isLoading}
-            >
-              <Text style={styles.cancelButtonText}>Cancelar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.button, styles.submitButton]}
-              onPress={handleSubmit}
-              disabled={isLoading || !formData.final_cash_real}
-            >
-              {isLoading ? (
-                <ActivityIndicator size="small" color={Colors.white} />
-              ) : (
-                <>
-                  <Ionicons name="checkmark-circle" size={20} color={Colors.white} />
-                  <Text style={styles.submitButtonText}>Cerrar Turno</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
+        <View style={styles.footer}>
+          <TouchableOpacity
+            style={[styles.button, styles.cancelButton]}
+            onPress={onClose}
+            disabled={isLoading}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.cancelButtonText}>Cancelar</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.button, styles.submitButton]}
+            onPress={handleSubmit}
+            disabled={isLoading || !formData.final_cash_real}
+            activeOpacity={0.7}
+          >
+            {isLoading ? (
+              <ActivityIndicator size="small" color={Colors.white} />
+            ) : (
+              <>
+                <Ionicons name="checkmark-circle" size={20} color={Colors.white} />
+                <Text style={styles.submitButtonText}>Cerrar Turno</Text>
+              </>
+            )}
+          </TouchableOpacity>
         </View>
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
+  container: {
     flex: 1,
-    backgroundColor: Colors.overlay,
-    justifyContent: 'flex-end',
-  },
-  modalContainer: {
-    backgroundColor: Colors.white,
-    borderTopLeftRadius: BorderRadius.xl,
-    borderTopRightRadius: BorderRadius.xl,
-    maxHeight: '90%',
+    backgroundColor: Colors.background,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: Spacing.lg,
+    backgroundColor: Colors.white,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
@@ -279,7 +278,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   content: {
+    flex: 1,
+  },
+  scrollContent: {
     padding: Spacing.lg,
+    paddingBottom: Spacing.xl,
   },
   shiftInfo: {
     backgroundColor: Colors.primaryLight,

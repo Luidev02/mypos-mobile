@@ -242,6 +242,18 @@ class POSService {
     return Array.isArray(response) ? response : response.data;
   }
 
+  async updateCustomer(id: number, customerData: CreateCustomerRequest): Promise<Customer> {
+    const response = await apiService.putToken<{ success: boolean; data: Customer; message: string }>(
+      ENDPOINTS.CUSTOMERS.UPDATE(id),
+      customerData
+    );
+    return response.data;
+  }
+
+  async deleteCustomer(id: number): Promise<void> {
+    await apiService.deleteToken(ENDPOINTS.CUSTOMERS.DELETE(id));
+  }
+
   async validateCoupon(code: string): Promise<Coupon> {
     const response = await apiService.getToken<Coupon | { data: Coupon }>(
       ENDPOINTS.COUPONS.VALIDATE(code)

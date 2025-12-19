@@ -122,22 +122,23 @@ export interface SaleItem {
 }
 
 export interface CreateSaleRequest {
+  shift_id: number; // Requerido - ID del turno activo
   customer_id: number;
   customer_name?: string;
   sale_type?: string; // carry, delivery, dine_in
-  cash_register_id: number; // Requerido - ID de la caja registradora
-  shift_id: number; // Requerido - ID del turno activo
-  warehouse_id: number; // Requerido - ID de la bodega (viene del turno)
   payment_method: 'cash' | 'transfer';
   coupon_id?: number | null;
   discount_percentage?: number;
-  resolution_id?: number | null; // Opcional - Para facturación electrónica
-  invoice_number?: string | null; // Opcional - Número de factura
   subtotal?: number;
   total?: number;
   amount_received?: number;
   change_amount?: number;
-  items: SaleItem[];
+  products: Array<{
+    product_id: number;
+    quantity: number;
+    unit_price: number;
+    discount?: number;
+  }>;
 }
 
 export interface Sale {

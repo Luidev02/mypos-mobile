@@ -61,6 +61,7 @@ export const ENDPOINTS = {
     DETAIL: (id: number) => `/api/customers/${id}`,
     CREATE: '/api/customers',
     UPDATE: (id: number) => `/api/customers/${id}`,
+    DELETE: (id: number) => `/api/customers/${id}`,
     SEARCH: '/api/pos/customers/search',
   },
 

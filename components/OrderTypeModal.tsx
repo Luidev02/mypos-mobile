@@ -3,10 +3,12 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import {
     Modal,
+    SafeAreaView,
+    ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 
 interface OrderTypeModalProps {
@@ -33,18 +35,11 @@ export default function OrderTypeModal({
       color: Colors.primary,
     },
     {
-      id: 'delivery',
+      id: 'Delivery',
       label: 'Entrega',
       icon: 'bicycle-outline',
       description: 'Se envía a domicilio',
       color: Colors.info,
-    },
-    {
-      id: 'dine_in',
-      label: 'Comer Aquí',
-      icon: 'restaurant-outline',
-      description: 'Consumo en el local',
-      color: Colors.success,
     },
   ];
 
@@ -59,7 +54,7 @@ export default function OrderTypeModal({
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
             <Ionicons name="close" size={28} color={Colors.text} />
@@ -68,7 +63,11 @@ export default function OrderTypeModal({
           <View style={{ width: 40 }} />
         </View>
 
-        <View style={styles.content}>
+        <ScrollView 
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.banner}>
             <Ionicons name="document-text" size={48} color={Colors.primary} />
             <Text style={styles.bannerTitle}>¿Cómo será esta orden?</Text>
@@ -87,6 +86,7 @@ export default function OrderTypeModal({
                   { borderLeftColor: type.color },
                 ]}
                 onPress={() => handleSelect(type.id)}
+                activeOpacity={0.7}
               >
                 <View
                   style={[
@@ -124,24 +124,26 @@ export default function OrderTypeModal({
               El tipo de orden te ayuda a organizar y filtrar tus ventas en los reportes
             </Text>
           </View>
-        </View>
+        </ScrollView>
 
         <View style={styles.footer}>
           <TouchableOpacity
             style={[styles.footerButton, styles.cancelButton]}
             onPress={onClose}
+            activeOpacity={0.7}
           >
             <Text style={styles.cancelButtonText}>Cancelar</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.footerButton, styles.confirmButton]}
             onPress={handleConfirm}
+            activeOpacity={0.7}
           >
             <Ionicons name="checkmark" size={20} color={Colors.white} />
             <Text style={styles.confirmButtonText}>Confirmar</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 }
@@ -170,10 +172,13 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.bold,
     color: Colors.text,
   },
-  content: {
+  scrollView: {
     flex: 1,
+  },
+  scrollContent: {
     padding: Spacing.lg,
     gap: Spacing.lg,
+    paddingBottom: Spacing.xl,
   },
   banner: {
     backgroundColor: Colors.white,

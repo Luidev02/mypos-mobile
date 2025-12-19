@@ -10,6 +10,7 @@ import {
     FlatList,
     Modal,
     RefreshControl,
+    SafeAreaView,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -209,7 +210,7 @@ export default function OrdersModal({ visible, onClose, onSelectOrder }: OrdersM
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
             <Ionicons name="close" size={28} color={Colors.text} />
@@ -245,7 +246,7 @@ export default function OrdersModal({ visible, onClose, onSelectOrder }: OrdersM
             }
           />
         )}
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 }

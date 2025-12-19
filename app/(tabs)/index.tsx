@@ -1,7 +1,6 @@
 import BarcodeScanner from '@/components/BarcodeScanner';
 import CalculatorModal from '@/components/CalculatorModal';
 import { CategoryImage } from '@/components/CategoryImage';
-import CloseShiftModal from '@/components/CloseShiftModal';
 import CouponModal from '@/components/CouponModal';
 import CustomerModal from '@/components/CustomerModal';
 import OrdersModal from '@/components/OrdersModal';
@@ -17,8 +16,9 @@ import { posService } from '@/services';
 import type { Category, Product, Sale, Shift } from '@/types';
 import { formatCurrency, getStockColor } from '@/utils/helpers';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -66,7 +66,7 @@ export default function POSScreen() {
   
   // Modal states
   const [showShiftModal, setShowShiftModal] = useState(false);
-  const [showCloseShiftModal, setShowCloseShiftModal] = useState(false);
+  const [shiftModalMode, setShiftModalMode] = useState<'open' | 'close'>('open');
   const [showOrdersModal, setShowOrdersModal] = useState(false);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showOrderTypeModal, setShowOrderTypeModal] = useState(false);
@@ -82,6 +82,29 @@ export default function POSScreen() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Refrescar datos cuando la pantalla gana foco (después de volver del carrito)
+  useFocusEffect(
+    useCallback(() => {
+      // Refrescar turno activo y productos al volver
+      refreshPOSData();
+    }, [])
+  );
+
+  const refreshPOSData = async () => {
+    try {
+      const activeShift = await posService.getActiveShift();
+      setShift(activeShift);
+      
+      // Recargar productos si hay una categoría seleccionada
+      if (selectedCategory) {
+        const productsData = await posService.getProductsByCategory(selectedCategory);
+        setProducts(productsData);
+      }
+    } catch (error) {
+      console.error('Error refreshing POS data:', error);
+    }
+  };
 
   // Debounced search (500ms like web version)
   useEffect(() => {
@@ -199,6 +222,9 @@ export default function POSScreen() {
     try {
       const activeShift = await posService.getActiveShift();
       setShift(activeShift);
+      
+      // Refrescar también los productos por si cambió el almacén
+      await refreshPOSData();
     } catch (error) {
       // Si no hay turno activo después del cierre, está bien
       setShift(null);
@@ -209,8 +235,10 @@ export default function POSScreen() {
     // Si hay turno activo, mostrar modal de cierre
     // Si no hay turno, mostrar modal de apertura
     if (shift && shift.id) {
-      setShowCloseShiftModal(true);
+      setShiftModalMode('close');
+      setShowShiftModal(true);
     } else {
+      setShiftModalMode('open');
       setShowShiftModal(true);
     }
   };
@@ -697,16 +725,10 @@ export default function POSScreen() {
       {/* Shift Modal */}
       <ShiftModal
         visible={showShiftModal}
+        mode={shiftModalMode}
+        activeShift={shift}
         onClose={() => setShowShiftModal(false)}
         onSuccess={handleShiftSuccess}
-      />
-
-      {/* Close Shift Modal */}
-      <CloseShiftModal
-        visible={showCloseShiftModal}
-        onClose={() => setShowCloseShiftModal(false)}
-        onSuccess={handleShiftSuccess}
-        activeShift={shift}
       />
 
       {/* Orders Modal */}

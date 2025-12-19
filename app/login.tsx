@@ -2,7 +2,7 @@ import { BorderRadius, Colors, FontSize, FontWeight, Shadow, Spacing } from '@/c
 import { useAuth } from '@/contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -17,11 +17,18 @@ import {
 } from 'react-native';
 
 export default function LoginScreen() {
-  const { login } = useAuth();
+  const { login, isAuthenticated, isLoading: authLoading } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Redirigir al hub si ya está autenticado
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      router.replace('/(tabs)/hub');
+    }
+  }, [isAuthenticated, authLoading]);
 
   const handleLogin = async () => {
     if (!username.trim() || !password.trim()) {
@@ -42,6 +49,16 @@ export default function LoginScreen() {
       setIsLoading(false);
     }
   };
+
+  // Mostrar loading mientras verifica la sesión
+  if (authLoading) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={styles.loadingText}>Verificando sesión...</Text>
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView
@@ -211,5 +228,15 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xs,
     color: Colors.textLight,
     fontWeight: FontWeight.medium,
+  },
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  loadingText: {
+    fontSize: FontSize.md,
+    color: Colors.textLight,
+    marginTop: Spacing.md,
   },
 });

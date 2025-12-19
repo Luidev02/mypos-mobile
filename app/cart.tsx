@@ -12,7 +12,9 @@ import {
     Alert,
     FlatList,
     KeyboardAvoidingView,
+    Modal,
     Platform,
+    ScrollView,
     StyleSheet,
     Text,
     TextInput,
@@ -33,6 +35,8 @@ export default function CartScreen() {
   const [isLoadingShift, setIsLoadingShift] = useState(true);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [completedSale, setCompletedSale] = useState<any>(null);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [errorMessage, setErrorMessage] = useState({ title: '', message: '' });
 
   useEffect(() => {
     checkActiveShift();
@@ -86,59 +90,82 @@ export default function CartScreen() {
   };
 
   const handleProcessPayment = async () => {
+    console.log('🔄 Iniciando proceso de pago...');
+    console.log('Items en carrito:', items.length);
+    console.log('Método de pago:', paymentMethod);
+    console.log('Total:', total);
+    console.log('Monto recibido:', amountReceived);
+    
     if (items.length === 0) {
-      Alert.alert('Error', 'El carrito está vacío');
+      setErrorMessage({ title: 'Carrito Vacío', message: 'El carrito está vacío' });
+      setShowErrorModal(true);
       return;
     }
 
     // Validación de turno activo (igual que en web)
     if (!activeShift || !activeShift.id) {
-      Alert.alert(
-        'Turno Requerido',
-        'Debes abrir un turno antes de procesar ventas. Ve a la pantalla de POS para abrir un turno.',
-        [
-          { text: 'Cancelar', style: 'cancel' },
-          { text: 'Ir a POS', onPress: () => router.replace('/(tabs)') }
-        ]
-      );
+      console.log('❌ No hay turno activo');
+      setErrorMessage({ 
+        title: 'Turno Requerido', 
+        message: 'Debes abrir un turno antes de procesar ventas. Ve a la pantalla de POS para abrir un turno.' 
+      });
+      setShowErrorModal(true);
       return;
     }
 
     if (paymentMethod === 'cash' && (parseFloat(amountReceived || '0') < total)) {
-      Alert.alert('Error', 'El monto recibido es menor al total');
+      console.log('❌ Monto insuficiente');
+      setErrorMessage({ title: 'Monto Insuficiente', message: 'El monto recibido es menor al total' });
+      setShowErrorModal(true);
       return;
     }
 
+    if (!orderType) {
+      console.log('❌ No hay tipo de orden seleccionado');
+      setErrorMessage({ 
+        title: 'Tipo de Orden Requerido', 
+        message: 'Debes seleccionar un tipo de orden (Llevar/Entrega) antes de procesar el pago' 
+      });
+      setShowErrorModal(true);
+      return;
+    }
+
+    console.log('✅ Validaciones pasadas, procesando...');
     setIsProcessing(true);
     try {
+      // Mapeo de sale_type a los valores que espera el backend
+      const saleTypeMap: Record<string, string> = {
+        'Llevar': 'carry',
+        'Entrega': 'delivery',
+      };
+
       // Estructura exacta del flujo web
       const saleData: CreateSaleRequest = {
+        shift_id: activeShift.id,
         customer_id: customerId,
         customer_name: customer,
-        sale_type: orderType || '',
+        sale_type: saleTypeMap[orderType] || 'carry',
         payment_method: paymentMethod,
         coupon_id: couponId,
         discount_percentage: discount,
-        cash_register_id: activeShift.cash_register_id,
-        shift_id: activeShift.id,
-        warehouse_id: activeShift.warehouse_id,
-        resolution_id: null,
-        invoice_number: null,
         subtotal: subtotal,
         total: total,
         amount_received: paymentMethod === 'cash' ? parseFloat(amountReceived || '0') : total,
         change_amount: paymentMethod === 'cash' ? change : 0,
-        items: items.map(item => ({
+        products: items.map(item => ({
           product_id: item.product_id,
           quantity: item.quantity,
-          price: item.unit_price,
-          tax_rate: 19,
+          unit_price: item.unit_price,
           discount: item.discount || 0,
-          is_inventory_managed: true,
         })),
       };
 
+      console.log('📦 Datos de venta:', JSON.stringify(saleData, null, 2));
+      console.log('🚀 Enviando petición al servidor...');
+      
       const response = await posService.createSale(saleData);
+      console.log('✅ Respuesta recibida:', response);
+      
       const sale = response;
       
       setCompletedSale({
@@ -148,16 +175,27 @@ export default function CartScreen() {
         change_amount: change,
       });
       
+      console.log('✅ Venta completada, mostrando modal de éxito');
+      
+      // Limpiar el carrito después de la venta exitosa
+      clearCart();
+      resetSaleData();
+      
+      // Actualizar el turno activo para reflejar las ventas
+      await checkActiveShift();
+      
       setShowPaymentModal(false);
       setShowSuccessModal(true);
     } catch (error: any) {
-      console.error('Error al procesar venta:', error);
+      console.error('❌ Error al procesar venta:', error);
+      console.error('Error completo:', JSON.stringify(error, null, 2));
       Alert.alert(
         'Error al Procesar Venta',
         error.response?.data?.message || error.message || 'No se pudo procesar la venta. Verifica que el turno esté activo.'
       );
     } finally {
       setIsProcessing(false);
+      console.log('🔄 isProcessing = false');
     }
   };
 
@@ -327,117 +365,141 @@ export default function CartScreen() {
         </View>
 
       {showPaymentModal && (
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Método de Pago</Text>
-
-            <View style={styles.paymentMethods}>
-              <TouchableOpacity
-                style={[
-                  styles.paymentMethod,
-                  paymentMethod === 'cash' && styles.paymentMethodActive,
-                ]}
-                onPress={() => setPaymentMethod('cash')}
-              >
-                <Ionicons
-                  name="cash-outline"
-                  size={32}
-                  color={paymentMethod === 'cash' ? Colors.white : Colors.primary}
-                />
-                <Text
-                  style={[
-                    styles.paymentMethodText,
-                    paymentMethod === 'cash' && styles.paymentMethodTextActive,
-                  ]}
-                >
-                  Efectivo
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.paymentMethod,
-                  paymentMethod === 'transfer' && styles.paymentMethodActive,
-                ]}
-                onPress={() => setPaymentMethod('transfer')}
-              >
-                <Ionicons
-                  name="card-outline"
-                  size={32}
-                  color={paymentMethod === 'transfer' ? Colors.white : Colors.primary}
-                />
-                <Text
-                  style={[
-                    styles.paymentMethodText,
-                    paymentMethod === 'transfer' && styles.paymentMethodTextActive,
-                  ]}
-                >
-                  Transferencia
-                </Text>
+        <Modal
+          animationType="slide"
+          transparent={false}
+          visible={showPaymentModal}
+          presentationStyle="pageSheet"
+        >
+          <SafeAreaView style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Método de Pago</Text>
+              <TouchableOpacity onPress={() => setShowPaymentModal(false)}>
+                <Ionicons name="close" size={28} color={Colors.text} />
               </TouchableOpacity>
             </View>
 
-            {paymentMethod === 'cash' && (
-              <>
-                <Text style={styles.inputLabel}>Monto Recibido:</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="$0"
-                  placeholderTextColor={Colors.textLight}
-                  keyboardType="numeric"
-                  value={amountReceived}
-                  onChangeText={setAmountReceived}
-                  autoFocus
-                />
-                
-                {/* Botones rápidos - igual que en web */}
-                <View style={styles.quickAmounts}>
-                  <TouchableOpacity
-                    style={styles.quickAmountButton}
-                    onPress={() => setAmountReceived(total.toString())}
+            <ScrollView 
+              style={styles.modalContent}
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.paymentMethods}>
+                <TouchableOpacity
+                  style={[
+                    styles.paymentMethod,
+                    paymentMethod === 'cash' && styles.paymentMethodActive,
+                  ]}
+                  onPress={() => setPaymentMethod('cash')}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name="cash-outline"
+                    size={32}
+                    color={paymentMethod === 'cash' ? Colors.white : Colors.primary}
+                  />
+                  <Text
+                    style={[
+                      styles.paymentMethodText,
+                      paymentMethod === 'cash' && styles.paymentMethodTextActive,
+                    ]}
                   >
-                    <Text style={styles.quickAmountText}>Exacto</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.quickAmountButton}
-                    onPress={() => setAmountReceived((Math.ceil(total / 5000) * 5000).toString())}
-                  >
-                    <Text style={styles.quickAmountText}>+5k</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.quickAmountButton}
-                    onPress={() => setAmountReceived((Math.ceil(total / 10000) * 10000).toString())}
-                  >
-                    <Text style={styles.quickAmountText}>+10k</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.quickAmountButton}
-                    onPress={() => setAmountReceived((Math.ceil(total / 20000) * 20000).toString())}
-                  >
-                    <Text style={styles.quickAmountText}>+20k</Text>
-                  </TouchableOpacity>
-                </View>
-                
-                {parseFloat(amountReceived || '0') > 0 && (
-                  <View style={[
-                    styles.changeContainer,
-                    parseFloat(amountReceived || '0') >= total ? styles.changePositive : styles.changeNegative
-                  ]}>
-                    <Text style={styles.changeLabel}>
-                      {parseFloat(amountReceived || '0') >= total ? 'Vuelto a Entregar' : 'Falta'}
-                    </Text>
-                    <Text style={styles.changeAmount}>
-                      {formatCurrency(Math.abs(parseFloat(amountReceived || '0') - total))}
-                    </Text>
-                  </View>
-                )}
-              </>
-            )}
+                    Efectivo
+                  </Text>
+                </TouchableOpacity>
 
-            <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[
+                    styles.paymentMethod,
+                    paymentMethod === 'transfer' && styles.paymentMethodActive,
+                  ]}
+                  onPress={() => setPaymentMethod('transfer')}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name="card-outline"
+                    size={32}
+                    color={paymentMethod === 'transfer' ? Colors.white : Colors.primary}
+                  />
+                  <Text
+                    style={[
+                      styles.paymentMethodText,
+                      paymentMethod === 'transfer' && styles.paymentMethodTextActive,
+                    ]}
+                  >
+                    Transferencia
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {paymentMethod === 'cash' && (
+                <>
+                  <Text style={styles.inputLabel}>Monto Recibido:</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="$0"
+                    placeholderTextColor={Colors.textLight}
+                    keyboardType="numeric"
+                    value={amountReceived}
+                    onChangeText={setAmountReceived}
+                    autoFocus
+                  />
+                  
+                  {/* Botones rápidos - igual que en web */}
+                  <View style={styles.quickAmounts}>
+                    <TouchableOpacity
+                      style={styles.quickAmountButton}
+                      onPress={() => setAmountReceived(total.toString())}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.quickAmountText}>Exacto</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.quickAmountButton}
+                      onPress={() => setAmountReceived((Math.ceil(total / 5000) * 5000).toString())}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.quickAmountText}>+5k</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.quickAmountButton}
+                      onPress={() => setAmountReceived((Math.ceil(total / 10000) * 10000).toString())}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.quickAmountText}>+10k</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.quickAmountButton}
+                      onPress={() => setAmountReceived((Math.ceil(total / 20000) * 20000).toString())}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.quickAmountText}>+20k</Text>
+                    </TouchableOpacity>
+                  </View>
+                  
+                  {parseFloat(amountReceived || '0') > 0 && (
+                    <View style={[
+                      styles.changeContainer,
+                      parseFloat(amountReceived || '0') >= total ? styles.changePositive : styles.changeNegative
+                    ]}>
+                      <Text style={styles.changeLabel}>
+                        {parseFloat(amountReceived || '0') >= total ? 'Vuelto a Entregar' : 'Falta'}
+                      </Text>
+                      <Text style={styles.changeAmount}>
+                        {formatCurrency(Math.abs(parseFloat(amountReceived || '0') - total))}
+                      </Text>
+                    </View>
+                  )}
+                </>
+              )}
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalButtonCancel]}
                 onPress={() => setShowPaymentModal(false)}
+                activeOpacity={0.7}
               >
                 <Text style={styles.modalButtonCancelText}>Cancelar</Text>
               </TouchableOpacity>
@@ -445,18 +507,29 @@ export default function CartScreen() {
                 style={[styles.modalButton, styles.modalButtonConfirm]}
                 onPress={handleProcessPayment}
                 disabled={isProcessing}
+                activeOpacity={0.7}
               >
                 <Text style={styles.modalButtonConfirmText}>
                   {isProcessing ? 'Procesando...' : 'Confirmar'}
                 </Text>
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
+          </SafeAreaView>
+        </Modal>
       )}
 
       {/* Modal de Éxito */}
-      {showSuccessModal && completedSale && (
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showSuccessModal}
+        onRequestClose={() => {
+          setShowSuccessModal(false);
+          clearCart();
+          resetSaleData();
+          router.back();
+        }}
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.successModalContent}>
             <View style={styles.successIcon}>
@@ -465,62 +538,91 @@ export default function CartScreen() {
             
             <Text style={styles.successTitle}>¡Venta Exitosa!</Text>
             
-            <View style={styles.successInfo}>
-              <View style={styles.successRow}>
-                <Text style={styles.successLabel}>Factura:</Text>
-                <Text style={styles.successValue}>
-                  {completedSale.invoice_number || completedSale.folio || `Venta #${completedSale.id}`}
-                </Text>
+            {completedSale && (
+              <View style={styles.successInfo}>
+                <View style={styles.successRow}>
+                  <Text style={styles.successLabel}>Factura:</Text>
+                  <Text style={styles.successValue}>
+                    {completedSale.invoice_number || completedSale.folio || `Venta #${completedSale.id}`}
+                  </Text>
+                </View>
+                
+                <View style={styles.successRow}>
+                  <Text style={styles.successLabel}>Total Pagado:</Text>
+                  <Text style={styles.successTotal}>
+                    {formatCurrency(completedSale.total || completedSale.total_amount || 0)}
+                  </Text>
+                </View>
+                
+                {completedSale.payment_method === 'cash' && (
+                  <>
+                    <View style={styles.successRow}>
+                      <Text style={styles.successLabel}>Recibido:</Text>
+                      <Text style={styles.successValue}>
+                        {formatCurrency(completedSale.amount_received)}
+                      </Text>
+                    </View>
+                    <View style={styles.successRow}>
+                      <Text style={styles.successLabel}>Vuelto:</Text>
+                      <Text style={[styles.successValue, { color: Colors.success, fontSize: FontSize.xl }]}>
+                        {formatCurrency(completedSale.change_amount)}
+                      </Text>
+                    </View>
+                  </>
+                )}
+                
+                <View style={styles.successRow}>
+                  <Text style={styles.successLabel}>Método:</Text>
+                  <Text style={styles.successValue}>
+                    {completedSale.payment_method === 'cash' ? 'Efectivo' : 'Transferencia'}
+                  </Text>
+                </View>
               </View>
-              
-              <View style={styles.successRow}>
-                <Text style={styles.successLabel}>Total Pagado:</Text>
-                <Text style={styles.successTotal}>
-                  {formatCurrency(completedSale.total || completedSale.total_amount || 0)}
-                </Text>
-              </View>
-              
-              {completedSale.payment_method === 'cash' && (
-                <>
-                  <View style={styles.successRow}>
-                    <Text style={styles.successLabel}>Recibido:</Text>
-                    <Text style={styles.successValue}>
-                      {formatCurrency(completedSale.amount_received)}
-                    </Text>
-                  </View>
-                  <View style={styles.successRow}>
-                    <Text style={styles.successLabel}>Vuelto:</Text>
-                    <Text style={[styles.successValue, { color: Colors.success, fontSize: FontSize.xl }]}>
-                      {formatCurrency(completedSale.change_amount)}
-                    </Text>
-                  </View>
-                </>
-              )}
-              
-              <View style={styles.successRow}>
-                <Text style={styles.successLabel}>Método:</Text>
-                <Text style={styles.successValue}>
-                  {completedSale.payment_method === 'cash' ? 'Efectivo' : 'Transferencia'}
-                </Text>
-              </View>
-            </View>
+            )}
 
             <View style={styles.successButtons}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalButtonCancel]}
                 onPress={() => {
                   setShowSuccessModal(false);
-                  clearCart();
-                  resetSaleData();
+                  // Ya se limpió en handleProcessPayment
                   router.back();
                 }}
+                activeOpacity={0.7}
               >
                 <Text style={styles.modalButtonCancelText}>Cerrar</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
-      )}
+      </Modal>
+
+      {/* Modal de Error */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showErrorModal}
+        onRequestClose={() => setShowErrorModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.errorModalContent}>
+            <View style={styles.errorIcon}>
+              <Ionicons name="alert-circle" size={80} color={Colors.error} />
+            </View>
+            
+            <Text style={styles.errorTitle}>{errorMessage.title}</Text>
+            <Text style={styles.errorMessage}>{errorMessage.message}</Text>
+
+            <TouchableOpacity
+              style={[styles.modalButton, styles.modalButtonConfirm]}
+              onPress={() => setShowErrorModal(false)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.modalButtonConfirmText}>Entendido</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -691,17 +793,38 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: Spacing.lg,
   },
-  modalContent: {
+  modalContainer: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: Spacing.lg,
     backgroundColor: Colors.white,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.xl,
+    ...Shadow.sm,
+  },
+  modalContent: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: Spacing.lg,
+    paddingBottom: Spacing.xl,
     gap: Spacing.lg,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    padding: Spacing.lg,
+    backgroundColor: Colors.white,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
   },
   modalTitle: {
     fontSize: FontSize.xl,
     fontWeight: FontWeight.bold,
     color: Colors.text,
-    textAlign: 'center',
   },
   paymentMethods: {
     flexDirection: 'row',
@@ -756,6 +879,8 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
     borderRadius: BorderRadius.md,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
   },
   modalButtonCancel: {
     backgroundColor: Colors.background,
@@ -867,5 +992,29 @@ const styles = StyleSheet.create({
   successButtons: {
     flexDirection: 'row',
     gap: Spacing.md,
+  },
+  errorModalContent: {
+    backgroundColor: Colors.white,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.xl,
+    gap: Spacing.lg,
+    maxWidth: 400,
+    width: '100%',
+    alignItems: 'center',
+  },
+  errorIcon: {
+    alignItems: 'center',
+  },
+  errorTitle: {
+    fontSize: FontSize.xxl,
+    fontWeight: FontWeight.bold,
+    color: Colors.error,
+    textAlign: 'center',
+  },
+  errorMessage: {
+    fontSize: FontSize.md,
+    color: Colors.text,
+    textAlign: 'center',
+    lineHeight: 22,
   },
 });

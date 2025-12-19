@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import {
     Alert,
     Modal,
+    SafeAreaView,
     ScrollView,
     StyleSheet,
     Text,
@@ -56,7 +57,7 @@ export default function SettingsModal({
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
             <Ionicons name="close" size={28} color={Colors.text} />
@@ -65,7 +66,11 @@ export default function SettingsModal({
           <View style={{ width: 40 }} />
         </View>
 
-        <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+        <ScrollView 
+          style={styles.content} 
+          contentContainerStyle={styles.contentContainer}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.banner}>
             <Ionicons name="settings" size={48} color={Colors.primary} />
             <Text style={styles.bannerTitle}>Personaliza tu Venta</Text>
@@ -151,6 +156,7 @@ export default function SettingsModal({
           <TouchableOpacity
             style={[styles.footerButton, styles.clearButton]}
             onPress={handleClear}
+            activeOpacity={0.7}
           >
             <Ionicons name="trash-outline" size={20} color={Colors.error} />
             <Text style={styles.clearButtonText}>Limpiar</Text>
@@ -158,12 +164,13 @@ export default function SettingsModal({
           <TouchableOpacity
             style={[styles.footerButton, styles.saveButton]}
             onPress={handleSave}
+            activeOpacity={0.7}
           >
             <Ionicons name="checkmark" size={20} color={Colors.white} />
             <Text style={styles.saveButtonText}>Guardar</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 }
