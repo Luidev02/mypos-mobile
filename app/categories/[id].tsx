@@ -6,8 +6,9 @@ import type { CategoryDetailed } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { CategoryImage } from '@/components/CategoryImage';
 
 export default function CategoryDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -78,9 +79,12 @@ export default function CategoryDetailScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        {category.image && (
-          <Image source={{ uri: category.image }} style={styles.image} resizeMode="cover" />
-        )}
+        <CategoryImage 
+          categoryId={category.id} 
+          style={styles.image}
+          placeholderColor={Colors.textSecondary}
+          placeholderSize={48}
+        />
 
         <View style={styles.infoCard}>
           <Text style={styles.label}>Nombre</Text>

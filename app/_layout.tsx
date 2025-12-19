@@ -1,6 +1,7 @@
 import { AuthProvider } from '@/contexts/AuthContext';
 import { CartProvider } from '@/contexts/CartContext';
 import { SaleProvider } from '@/contexts/SaleContext';
+import { ToastProvider } from '@/contexts/ToastContext';
 import '@/utils/suppressWarnings';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useFonts } from 'expo-font';
@@ -50,28 +51,33 @@ export default function RootLayout() {
 function RootLayoutNav() {
   return (
     <PaperProvider>
-      <AuthProvider>
-        <CartProvider>
-          <SaleProvider>
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="login" options={{ headerShown: false }} />
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              <Stack.Screen name="cart" options={{ headerShown: false }} />
-              <Stack.Screen name="products/index" options={{ headerShown: false }} />
-              <Stack.Screen name="categories/index" options={{ headerShown: false }} />
-              <Stack.Screen name="categories/[id]" options={{ headerShown: false }} />
-              <Stack.Screen name="categories/new" options={{ headerShown: false }} />
-              <Stack.Screen name="customers/index" options={{ headerShown: false }} />
-              <Stack.Screen name="shifts" options={{ headerShown: false }} />
-              <Stack.Screen name="sales/index" options={{ headerShown: false }} />
-              <Stack.Screen name="coupons/index" options={{ headerShown: false }} />
-              <Stack.Screen name="taxes/index" options={{ headerShown: false }} />
-              <Stack.Screen name="company/index" options={{ headerShown: false }} />
-              <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-            </Stack>
-          </SaleProvider>
-        </CartProvider>
-      </AuthProvider>
+      <ToastProvider>
+        <AuthProvider>
+          <CartProvider>
+            <SaleProvider>
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="login" options={{ headerShown: false }} />
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                <Stack.Screen name="cart" options={{ headerShown: false }} />
+                <Stack.Screen name="products/index" options={{ headerShown: false }} />
+                <Stack.Screen name="categories/index" options={{ headerShown: false }} />
+                <Stack.Screen name="categories/[id]" options={{ headerShown: false }} />
+                <Stack.Screen name="categories/new" options={{ headerShown: false }} />
+                <Stack.Screen name="customers/index" options={{ headerShown: false }} />
+                <Stack.Screen name="shifts" options={{ headerShown: false }} />
+                <Stack.Screen name="sales/index" options={{ headerShown: false }} />
+                <Stack.Screen name="purchases/index" options={{ headerShown: false }} />
+                <Stack.Screen name="warehouses/index" options={{ headerShown: false }} />
+                <Stack.Screen name="coupons/index" options={{ headerShown: false }} />
+                <Stack.Screen name="taxes/index" options={{ headerShown: false }} />
+                <Stack.Screen name="company/index" options={{ headerShown: false }} />
+                <Stack.Screen name="profile/index" options={{ headerShown: false }} />
+                <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+              </Stack>
+            </SaleProvider>
+          </CartProvider>
+        </AuthProvider>
+      </ToastProvider>
     </PaperProvider>
   );
 }

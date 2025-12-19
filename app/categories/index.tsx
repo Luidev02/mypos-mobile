@@ -8,8 +8,9 @@ import type { CategoryDetailed } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Alert, FlatList, Image, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { CategoryImage } from '@/components/CategoryImage';
 
 export default function CategoriesScreen() {
   const [categories, setCategories] = useState<CategoryDetailed[]>([]);
@@ -53,7 +54,7 @@ export default function CategoriesScreen() {
     }
 
     const filtered = categories.filter(cat =>
-      cat.name.toLowerCase().includes(searchQuery.toLowerCase())
+      cat.name?.toLowerCase().includes(searchQuery.toLowerCase())
     );
     setFilteredCategories(filtered);
   };
@@ -87,13 +88,12 @@ export default function CategoriesScreen() {
       onPress={() => router.push(`/categories/${item.id}` as any)}
       activeOpacity={0.7}
     >
-      {item.image && (
-        <Image
-          source={{ uri: item.image }}
-          style={styles.categoryImage}
-          resizeMode="cover"
-        />
-      )}
+      <CategoryImage 
+        categoryId={item.id} 
+        style={styles.categoryImage}
+        placeholderColor={Colors.textSecondary}
+        placeholderSize={32}
+      />
       <View style={styles.categoryInfo}>
         <Text style={styles.categoryName}>{item.name}</Text>
         {item.creation_date && (
@@ -128,7 +128,7 @@ export default function CategoriesScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={Colors.white} />
@@ -183,7 +183,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: Spacing.lg,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Platform.OS === 'ios' ? 8 : Spacing.lg,
+    paddingBottom: Spacing.lg,
     backgroundColor: Colors.primary,
     ...Shadow.sm,
   },

@@ -113,32 +113,72 @@ export class ExtendedProductService {
 
   async createProduct(data: CreateProductRequest): Promise<ProductDetailed> {
     const formData = new FormData();
-    Object.keys(data).forEach(key => {
-      const value = data[key as keyof CreateProductRequest];
-      if (value !== undefined) {
-        formData.append(key, value as any);
+    
+    // Separar la imagen del resto de los datos
+    const { image, ...productData } = data as any;
+    
+    // Agregar campos normales
+    Object.keys(productData).forEach(key => {
+      const value = productData[key];
+      if (value !== undefined && value !== null) {
+        formData.append(key, value.toString());
       }
     });
     
+    // Agregar imagen si existe
+    if (image) {
+      const imageFile = {
+        uri: image.uri,
+        type: image.mimeType || image.type || 'image/jpeg',
+        name: image.fileName || image.name || 'product.jpg',
+      } as any;
+      formData.append('image', imageFile);
+    }
+    
     const response = await apiService.postToken<{ success: boolean; data: ProductDetailed }>(
       ENDPOINTS.PRODUCTS.CREATE,
-      formData
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      }
     );
     return response.data;
   }
 
   async updateProduct(id: number, data: UpdateProductRequest): Promise<ProductDetailed> {
     const formData = new FormData();
-    Object.keys(data).forEach(key => {
-      const value = data[key as keyof UpdateProductRequest];
-      if (value !== undefined && key !== 'id') {
-        formData.append(key, value as any);
+    
+    // Separar la imagen del resto de los datos
+    const { image, ...productData } = data as any;
+    
+    // Agregar campos normales
+    Object.keys(productData).forEach(key => {
+      const value = productData[key];
+      if (value !== undefined && value !== null && key !== 'id') {
+        formData.append(key, value.toString());
       }
     });
     
+    // Agregar imagen si existe
+    if (image) {
+      const imageFile = {
+        uri: image.uri,
+        type: image.mimeType || image.type || 'image/jpeg',
+        name: image.fileName || image.name || 'product.jpg',
+      } as any;
+      formData.append('image', imageFile);
+    }
+    
     const response = await apiService.putToken<{ success: boolean; data: ProductDetailed }>(
       ENDPOINTS.PRODUCTS.UPDATE(id),
-      formData
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      }
     );
     return response.data;
   }
