@@ -56,10 +56,31 @@ export class CategoryService {
   }
 
   async getCategory(id: number): Promise<CategoryDetailed> {
-    const response = await apiService.getToken<CategoryDetailed | { data: CategoryDetailed }>(
-      ENDPOINTS.CATEGORIES.DETAIL(id)
-    );
-    return 'data' in response ? response.data : response;
+    const response = await apiService.getToken<any>(ENDPOINTS.CATEGORIES.DETAIL(id));
+    console.log('=== RESPUESTA DEL SERVICIO ===');
+    console.log('Response completa:', JSON.stringify(response, null, 2));
+    
+    let result: CategoryDetailed;
+    
+    // Si la respuesta es un array con un solo elemento
+    if (Array.isArray(response)) {
+      result = response[0];
+    }
+    // Si tiene data y es un array
+    else if (response.data && Array.isArray(response.data)) {
+      result = response.data[0];
+    }
+    // Si tiene data y es un objeto
+    else if (response.data && typeof response.data === 'object') {
+      result = response.data;
+    }
+    // Si es un objeto directo
+    else {
+      result = response;
+    }
+    
+    console.log('Resultado final:', JSON.stringify(result, null, 2));
+    return result;
   }
 
   async createCategory(data: CreateCategoryRequest): Promise<CategoryDetailed> {
@@ -231,17 +252,32 @@ export class CustomerService {
 // Sales Service
 export class SalesService {
   async getSales(): Promise<SaleDetailed[]> {
-    const response = await apiService.getToken<{ data: SaleDetailed[] }>(
-      ENDPOINTS.SALES.LIST
-    );
-    return response.data;
+    const response = await apiService.getToken<any>(ENDPOINTS.SALES.LIST);
+    
+    // Manejar diferentes formatos de respuesta
+    if (Array.isArray(response)) {
+      return response;
+    } else if (response.data && Array.isArray(response.data)) {
+      return response.data;
+    }
+    return [];
   }
 
   async getSale(id: number): Promise<SaleDetailed> {
-    const response = await apiService.getToken<{ data: SaleDetailed } | SaleDetailed>(
-      ENDPOINTS.SALES.DETAIL(id)
-    );
-    return 'data' in response ? response.data : response;
+    const response = await apiService.getToken<any>(ENDPOINTS.SALES.DETAIL(id));
+    
+    console.log('=== RESPUESTA DETALLE VENTA ===');
+    console.log('Response:', JSON.stringify(response, null, 2));
+    
+    // Manejar diferentes formatos de respuesta
+    if (Array.isArray(response)) {
+      return response[0];
+    } else if (response.data && Array.isArray(response.data)) {
+      return response.data[0];
+    } else if (response.data && typeof response.data === 'object') {
+      return response.data;
+    }
+    return response;
   }
 }
 
@@ -413,9 +449,9 @@ export class ExtendedInventoryService {
     await apiService.postToken(ENDPOINTS.INVENTORY.ADJUST, data);
   }
 
-  async getProductMovements(productId: number): Promise<ProductMovement[]> {
+  async getProductMovements(productId: number, limit: number = 100): Promise<ProductMovement[]> {
     const response = await apiService.getToken<ProductMovement[] | { data: ProductMovement[] }>(
-      `${ENDPOINTS.INVENTORY.MOVEMENTS}?product_id=${productId}`
+      `${ENDPOINTS.INVENTORY.PRODUCT_MOVEMENTS(productId)}?limit=${limit}`
     );
     return Array.isArray(response) ? response : response.data;
   }
@@ -495,6 +531,13 @@ export class RoleService {
 
   async deleteRole(id: number): Promise<void> {
     await apiService.deleteToken(ENDPOINTS.ROLES.DELETE(id));
+  }
+
+  async getPermissions(): Promise<Permission[]> {
+    const response = await apiService.getToken<Permission[] | { data: Permission[] }>(
+      ENDPOINTS.PERMISSIONS.LIST
+    );
+    return Array.isArray(response) ? response : response.data;
   }
 }
 
@@ -601,6 +644,35 @@ export class IntegrationService {
   }
 }
 
+// Clase combinada para user management
+class ExtendedUserService extends UserManagementService {
+  private roleServiceInstance = new RoleService();
+
+  async getRoles() {
+    return this.roleServiceInstance.getRoles();
+  }
+
+  async getRole(id: number) {
+    return this.roleServiceInstance.getRole(id);
+  }
+
+  async createRole(data: CreateRoleRequest) {
+    return this.roleServiceInstance.createRole(data);
+  }
+
+  async updateRole(id: number, data: UpdateRoleRequest) {
+    return this.roleServiceInstance.updateRole(id, data);
+  }
+
+  async deleteRole(id: number) {
+    return this.roleServiceInstance.deleteRole(id);
+  }
+
+  async getPermissions() {
+    return this.roleServiceInstance.getPermissions();
+  }
+}
+
 // Export service instances
 export const categoryService = new CategoryService();
 export const extendedProductService = new ExtendedProductService();
@@ -616,3 +688,4 @@ export const companyService = new CompanyService();
 export const roleService = new RoleService();
 export const userManagementService = new UserManagementService();
 export const integrationService = new IntegrationService();
+export const extendedUserService = new ExtendedUserService();

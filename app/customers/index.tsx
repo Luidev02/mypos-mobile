@@ -2,6 +2,7 @@ import { BorderRadius, Colors, FontSize, FontWeight, Shadow, Spacing } from '@/c
 import { posService } from '@/services';
 import type { Customer } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
@@ -67,8 +68,7 @@ export default function CustomersScreen() {
     const filtered = customers.filter(
       (customer) =>
         customer.name?.toLowerCase().includes(query) ||
-        customer.identification?.toLowerCase().includes(query) ||
-        customer.nit?.toLowerCase().includes(query) ||
+        customer.ident?.toLowerCase().includes(query) ||
         customer.phone?.toLowerCase().includes(query) ||
         customer.email?.toLowerCase().includes(query)
     );
@@ -93,8 +93,8 @@ export default function CustomersScreen() {
     setEditingCustomer(customer);
     setFormData({
       name: customer.name || '',
-      identification: customer.identification || customer.nit || '',
-      identificationType: (customer.identification_type as 'CC' | 'NIT' | 'CE' | 'TI') || 'CC',
+      identification: customer.ident || '',
+      identificationType: customer.ident_type || 'CC',
       phone: customer.phone || '',
       email: customer.email || '',
       address: customer.address || '',
@@ -114,8 +114,8 @@ export default function CustomersScreen() {
         // Actualizar cliente existente
         await posService.updateCustomer(editingCustomer.id, {
           name: formData.name,
-          identification: formData.identification,
-          identification_type: formData.identificationType,
+          ident: formData.identification,
+          ident_type: formData.identificationType,
           phone: formData.phone,
           email: formData.email,
           address: formData.address,
@@ -126,8 +126,8 @@ export default function CustomersScreen() {
         // Crear nuevo cliente
         await posService.createCustomer({
           name: formData.name,
-          identification: formData.identification,
-          identification_type: formData.identificationType,
+          ident: formData.identification,
+          ident_type: formData.identificationType,
           phone: formData.phone,
           email: formData.email,
           address: formData.address,
@@ -168,7 +168,11 @@ export default function CustomersScreen() {
   };
 
   const renderCustomerCard = ({ item }: { item: Customer }) => (
-    <View style={styles.card}>
+    <TouchableOpacity
+      style={styles.card}
+      onPress={() => router.push(`/customers/${item.id}` as any)}
+      activeOpacity={0.7}
+    >
       <View style={styles.cardHeader}>
         <View style={styles.avatarContainer}>
           <Ionicons name="person" size={24} color={Colors.primary} />
@@ -176,20 +180,26 @@ export default function CustomersScreen() {
         <View style={styles.cardInfo}>
           <Text style={styles.cardName}>{item.name}</Text>
           <Text style={styles.cardDetail}>
-            {item.identification_type || 'DNI'}: {item.identification || item.nit}
+            {item.ident_type || 'DNI'}: {item.ident}
           </Text>
         </View>
         <View style={styles.cardActions}>
           <TouchableOpacity
             style={styles.iconButton}
-            onPress={() => handleEdit(item)}
+            onPress={(e) => {
+              e.stopPropagation();
+              handleEdit(item);
+            }}
             activeOpacity={0.7}
           >
             <Ionicons name="pencil" size={20} color={Colors.primary} />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.iconButton}
-            onPress={() => handleDelete(item)}
+            onPress={(e) => {
+              e.stopPropagation();
+              handleDelete(item);
+            }}
             activeOpacity={0.7}
           >
             <Ionicons name="trash-outline" size={20} color={Colors.error} />
@@ -219,7 +229,13 @@ export default function CustomersScreen() {
           )}
         </View>
       )}
-    </View>
+      
+      {/* Indicador visual de que es clickeable */}
+      <View style={styles.cardFooter}>
+        <Text style={styles.viewDetailsText}>Ver detalles</Text>
+        <Ionicons name="chevron-forward" size={16} color={Colors.primary} />
+      </View>
+    </TouchableOpacity>
   );
 
   return (
@@ -534,6 +550,21 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     color: Colors.textLight,
     flex: 1,
+  },
+  cardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginTop: Spacing.sm,
+    paddingTop: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    gap: Spacing.xs,
+  },
+  viewDetailsText: {
+    fontSize: FontSize.sm,
+    color: Colors.primary,
+    fontWeight: FontWeight.medium,
   },
   modalContainer: {
     flex: 1,

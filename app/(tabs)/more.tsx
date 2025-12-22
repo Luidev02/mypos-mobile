@@ -48,6 +48,12 @@ export default function MoreScreen() {
       onPress: () => router.push('/profile/index'),
     },
     {
+      icon: 'shield-checkmark-outline',
+      title: 'Gestión',
+      subtitle: 'Usuarios, roles y permisos',
+      onPress: () => router.push('/management'),
+    },
+    {
       icon: 'grid-outline',
       title: 'Categorías',
       subtitle: 'Gestionar categorías de productos',

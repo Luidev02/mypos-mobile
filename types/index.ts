@@ -31,7 +31,8 @@ export interface Product {
   category_id: number;
   price: number;
   cost: number;
-  stock: number;
+  stock?: number;
+  stock_alert?: number;
   tax_id: number;
   is_active: boolean;
   image_url?: string;
@@ -40,6 +41,8 @@ export interface Product {
 export interface Category {
   id: number;
   name: string;
+  image?: string;
+  image_url?: string;
   products?: Product[];
 }
 
@@ -47,24 +50,30 @@ export interface Category {
 export interface Customer {
   id: number;
   name: string;
-  nit?: string;
-  identification?: string; // Alias de nit
-  identification_type?: 'CC' | 'NIT' | 'CE' | 'TI';
+  ident: string;
+  ident_type: 'CC' | 'NIT' | 'CE' | 'TI';
   email?: string;
   phone?: string;
   address?: string;
   city?: string;
-  is_active: boolean;
+  status: 'active' | 'inactive';
+  is_company?: number;
+  // Campos legacy para compatibilidad
+  nit?: string;
+  identification?: string;
+  identification_type?: 'CC' | 'NIT' | 'CE' | 'TI';
+  is_active?: boolean;
 }
 
 export interface CreateCustomerRequest {
   name: string;
-  identification: string;
-  identification_type?: 'CC' | 'NIT' | 'CE' | 'TI';
+  ident: string;
+  ident_type: 'CC' | 'NIT' | 'CE' | 'TI';
   phone?: string;
   email?: string;
   address?: string;
   city?: string;
+  is_company?: number;
 }
 
 // Coupon Types
@@ -209,9 +218,17 @@ export interface CashRegister {
 // Inventory Types
 export interface InventoryItem {
   product_id: number;
-  product: Product;
-  stock: number;
-  last_updated: string;
+  warehouse_id: number;
+  quantity: number;
+  product_title?: string;
+  sku?: string;
+  barcode?: string;
+  stock_alert?: number;
+  location_in_warehouse?: string;
+  // Propiedades opcionales para compatibilidad
+  product?: Product;
+  stock?: number;
+  last_updated?: string;
 }
 
 export interface InventoryMovement {
@@ -240,7 +257,8 @@ export interface TopProduct {
 
 // Extended Category Types
 export interface CategoryDetailed extends Category {
-  image: string;
+  company_id?: number;
+  image?: string;
   creation_date?: string;
   updated_at?: string;
 }
@@ -261,6 +279,8 @@ export interface ProductDetailed extends Product {
   category_name?: string;
   tax_name?: string;
   tax_rate?: number;
+  stock?: number;
+  quantity?: number; // Alias de stock
   stock_alert?: number;
   is_inventory_managed?: boolean;
   status?: 'active' | 'inactive';
@@ -462,6 +482,7 @@ export interface ProductMovement {
   quantity: number;
   reference_id?: number;
   reference_type?: string;
+  reason?: string;
   created_at: string;
   created_by?: string;
   notes?: string;

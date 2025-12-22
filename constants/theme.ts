@@ -6,6 +6,7 @@ export const Colors = {
   dark: '#322121',          // marron-quemado
   footer: '#6C4B4B',        // footerColor
   background: '#F8F8F8',    // backcolor
+  textSecondary: '#6B7280', // gray-500
   
   // Funcionales
   foreground: '#322121',
@@ -15,6 +16,7 @@ export const Colors = {
   success: '#22C55E',
   successLight: '#D1FAE5',
   error: '#EF4444',
+  errorLight: '#FEE2E2',
   warning: '#F59E0B',
   warningLight: '#FEF3C7',
   info: '#3B82F6',

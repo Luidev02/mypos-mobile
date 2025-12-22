@@ -242,6 +242,20 @@ class POSService {
     return Array.isArray(response) ? response : response.data;
   }
 
+  async getCustomer(id: number): Promise<Customer> {
+    const response = await apiService.getToken<any>(ENDPOINTS.CUSTOMERS.DETAIL(id));
+    
+    // Manejar diferentes formatos de respuesta
+    if (Array.isArray(response)) {
+      return response[0];
+    } else if (response.data && Array.isArray(response.data)) {
+      return response.data[0];
+    } else if (response.data && typeof response.data === 'object') {
+      return response.data;
+    }
+    return response;
+  }
+
   async updateCustomer(id: number, customerData: CreateCustomerRequest): Promise<Customer> {
     const response = await apiService.putToken<{ success: boolean; data: Customer; message: string }>(
       ENDPOINTS.CUSTOMERS.UPDATE(id),
@@ -289,14 +303,37 @@ class ProductService {
 }
 
 class InventoryService {
-  async getInventory(): Promise<InventoryItem[]> {
-    const response = await apiService.getToken<{ data: InventoryItem[] }>(ENDPOINTS.INVENTORY.LIST);
-    return response.data;
+  async getInventory(warehouseId: number = 1): Promise<InventoryItem[]> {
+    try {
+      const response = await apiService.getToken<any>(ENDPOINTS.INVENTORY.WAREHOUSE_STOCK(warehouseId));
+      // Manejar diferentes formatos de respuesta
+      if (Array.isArray(response)) {
+        return response;
+      } else if (response.data && Array.isArray(response.data)) {
+        return response.data;
+      }
+      return [];
+    } catch (error) {
+      console.error('Error loading inventory:', error);
+      return [];
+    }
   }
 
-  async getLowStock(): Promise<InventoryItem[]> {
-    const response = await apiService.getToken<{ data: InventoryItem[] }>(ENDPOINTS.INVENTORY.LOW_STOCK);
-    return response.data;
+  async getLowStock(warehouseId: number = 1): Promise<InventoryItem[]> {
+    try {
+      const url = `${ENDPOINTS.INVENTORY.LOW_STOCK}${warehouseId ? `?warehouseId=${warehouseId}` : ''}`;
+      const response = await apiService.getToken<any>(url);
+      // Manejar diferentes formatos de respuesta
+      if (Array.isArray(response)) {
+        return response;
+      } else if (response.data && Array.isArray(response.data)) {
+        return response.data;
+      }
+      return [];
+    } catch (error) {
+      console.error('Error loading low stock:', error);
+      return [];
+    }
   }
 }
 

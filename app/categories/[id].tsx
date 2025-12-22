@@ -25,8 +25,17 @@ export default function CategoryDetailScreen() {
       setIsLoading(true);
       setError(null);
       const data = await categoryService.getCategory(Number(id));
+      console.log('=== CATEGORIA CARGADA ===');
+      console.log('Data completa:', JSON.stringify(data, null, 2));
+      console.log('ID:', data.id);
+      console.log('Nombre:', data.name);
+      console.log('Company ID:', data.company_id);
+      console.log('Image:', data.image);
+      console.log('Creation Date:', data.creation_date);
+      console.log('Updated At:', data.updated_at);
       setCategory(data);
     } catch (error: any) {
+      console.error('Error cargando categoría:', error);
       setError(error.message || 'Error al cargar categoría');
     } finally {
       setIsLoading(false);
@@ -79,23 +88,53 @@ export default function CategoryDetailScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        <CategoryImage 
-          categoryId={category.id} 
-          style={styles.image}
-          placeholderColor={Colors.textSecondary}
-          placeholderSize={48}
-        />
+        {category.id && (
+          <CategoryImage 
+            categoryId={category.id} 
+            style={styles.image}
+            placeholderColor={Colors.textSecondary}
+            placeholderSize={48}
+          />
+        )}
+
+        <View style={styles.infoCard}>
+          <Text style={styles.label}>ID</Text>
+          <Text style={styles.value}>{category.id}</Text>
+        </View>
 
         <View style={styles.infoCard}>
           <Text style={styles.label}>Nombre</Text>
           <Text style={styles.value}>{category.name}</Text>
         </View>
 
+        {category.company_id && (
+          <View style={styles.infoCard}>
+            <Text style={styles.label}>ID de Empresa</Text>
+            <Text style={styles.value}>{category.company_id}</Text>
+          </View>
+        )}
+
+        {category.image && (
+          <View style={styles.infoCard}>
+            <Text style={styles.label}>Ruta de Imagen</Text>
+            <Text style={styles.value} numberOfLines={3}>{category.image}</Text>
+          </View>
+        )}
+
         {category.creation_date && (
           <View style={styles.infoCard}>
             <Text style={styles.label}>Fecha de Creación</Text>
             <Text style={styles.value}>
               {new Date(category.creation_date).toLocaleString()}
+            </Text>
+          </View>
+        )}
+
+        {category.updated_at && (
+          <View style={styles.infoCard}>
+            <Text style={styles.label}>Última Actualización</Text>
+            <Text style={styles.value}>
+              {new Date(category.updated_at).toLocaleString()}
             </Text>
           </View>
         )}

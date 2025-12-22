@@ -77,6 +77,8 @@ export default function InventoryScreen() {
   }, [searchQuery, inventory, filter]);
 
   const handleOpenQuickAdjust = () => {
+    console.log('=== handleOpenQuickAdjust called ===');
+    console.log('Setting modal to true');
     setSelectedProduct(null);
     setAdjustmentType('adjustment');
     setAdjustmentQuantity('');
@@ -84,6 +86,7 @@ export default function InventoryScreen() {
     setAdjustmentNotes('');
     setProductSearchQuery('');
     setShowQuickAdjustModal(true);
+    console.log('Modal state should be true now');
   };
 
   const handleSaveAdjustment = async () => {
@@ -266,6 +269,22 @@ export default function InventoryScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+      {/* <View style={styles.header}>
+        <Text style={styles.title}>Inventario</Text>
+        <TouchableOpacity
+          onPress={() => {
+            console.log('=== AJUSTAR INVENTARIO CLICKED ===');
+            Alert.alert('Test', 'Botón presionado');
+            handleOpenQuickAdjust();
+          }}
+          style={styles.adjustButton}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="add" size={20} color={Colors.white} />
+          <Text style={styles.adjustButtonText}>Ajustar Inventario</Text>
+        </TouchableOpacity>
+      </View> */}
+
       {/* Stats Cards */}
       <View style={styles.statsContainer}>
         <View style={styles.statCard}>
@@ -343,7 +362,10 @@ export default function InventoryScreen() {
       {/* Botón flotante para ajuste rápido */}
       <TouchableOpacity
         style={styles.fab}
-        onPress={handleOpenQuickAdjust}
+        onPress={() => {
+          console.log('FAB pressed');
+          handleOpenQuickAdjust();
+        }}
         activeOpacity={0.8}
       >
         <Ionicons name="add" size={28} color="#FFFFFF" />
@@ -534,23 +556,42 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Colors.background,
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: Spacing.lg,
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Platform.OS === 'ios' ? 8 : Spacing.lg,
+    paddingBottom: Spacing.lg,
     backgroundColor: Colors.white,
     ...Shadow.sm,
   },
-  backButton: {
-    marginRight: Spacing.md,
-  },
-  headerTitle: {
-    fontSize: FontSize.xl,
+  title: {
+    fontSize: FontSize.xxl,
     fontWeight: FontWeight.bold,
     color: Colors.text,
+  },
+  adjustButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.primary,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    gap: Spacing.xs,
+  },
+  adjustButtonText: {
+    color: Colors.white,
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
+  },
+  headerButton: {
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.white,
+    zIndex: 1000,
+    elevation: 5,
   },
   statsContainer: {
     flexDirection: 'row',

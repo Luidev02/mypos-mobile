@@ -50,14 +50,8 @@ export default function SalesScreen() {
     loadSales();
   };
 
-  const handleViewSale = async (sale: SaleDetailed) => {
-    try {
-      const saleDetail = await salesService.getSale(sale.id);
-      // Navigate to detail screen or show modal
-      toast.info(`Venta #${sale.invoice_number || sale.id}`);
-    } catch (err: any) {
-      toast.error('Error al cargar detalles de la venta');
-    }
+  const handleViewSale = (sale: SaleDetailed) => {
+    router.push(`/sales/${sale.id}` as any);
   };
 
   const filterSales = () => {
@@ -78,7 +72,10 @@ export default function SalesScreen() {
 
   const filteredSales = filterSales();
 
-  const totalRevenue = filteredSales.reduce((sum, sale) => sum + (sale.total || 0), 0) || 0;
+  const totalRevenue = filteredSales.reduce((sum, sale) => {
+    const saleTotal = Number(sale.total || 0);
+    return sum + saleTotal;
+  }, 0);
 
   const renderSale = ({ item }: { item: SaleDetailed }) => (
     <TouchableOpacity style={styles.saleCard} onPress={() => handleViewSale(item)}>
@@ -293,16 +290,20 @@ const styles = StyleSheet.create({
   statItem: {
     flex: 1,
     alignItems: 'center',
+    paddingHorizontal: 4,
   },
   statLabel: {
-    fontSize: 14,
+    fontSize: 12,
     color: Colors.textSecondary,
     marginBottom: 4,
+    textAlign: 'center',
   },
   statValue: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: 'bold',
     color: Colors.primary,
+    textAlign: 'center',
+    flexShrink: 1,
   },
   statDivider: {
     width: 1,
@@ -330,28 +331,33 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
+    gap: 8,
   },
   saleHeaderLeft: {
     flex: 1,
+    minWidth: 0,
   },
   saleInvoice: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
     color: Colors.text,
     marginBottom: 4,
   },
   saleDate: {
-    fontSize: 13,
+    fontSize: 11,
     color: Colors.textSecondary,
   },
   saleHeaderRight: {
     alignItems: 'flex-end',
+    flexShrink: 0,
+    maxWidth: '50%',
   },
   saleTotal: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     color: Colors.primary,
     marginBottom: 4,
+    textAlign: 'right',
   },
   statusBadge: {
     paddingHorizontal: 8,
@@ -387,14 +393,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 4,
+    gap: 8,
   },
   metaLabel: {
-    fontSize: 14,
+    fontSize: 13,
     color: Colors.textSecondary,
+    flex: 1,
   },
   metaValue: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: Colors.text,
+    textAlign: 'right',
+    flexShrink: 1,
   },
 });

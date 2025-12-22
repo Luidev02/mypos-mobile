@@ -51,8 +51,11 @@ export const ENDPOINTS = {
   INVENTORY: {
     LIST: '/api/inventory',
     LOW_STOCK: '/api/inventory/low-stock',
-    MOVEMENTS: '/api/inventory/movements',
+    MOVEMENTS: '/api/inventory',
     ADJUST: '/api/inventory/adjust',
+    PRODUCT_STOCK: (id: number) => `/api/inventory/product/${id}/stock`,
+    WAREHOUSE_STOCK: (id: number) => `/api/inventory/warehouse/${id}/stock`,
+    PRODUCT_MOVEMENTS: (id: number) => `/api/inventory/product/${id}/movements`,
   },
 
   // Customers
@@ -151,6 +154,11 @@ export const ENDPOINTS = {
     CREATE: '/api/roles',
     UPDATE: (id: number) => `/api/roles/${id}`,
     DELETE: (id: number) => `/api/roles/${id}`,
+  },
+
+  // Permissions
+  PERMISSIONS: {
+    LIST: '/api/permissions',
   },
 
   // Users

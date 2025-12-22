@@ -140,8 +140,8 @@ export default function ProductsScreen() {
           <Text style={styles.productSku}>SKU: {item.sku || 'N/A'}</Text>
           <View style={styles.productMeta}>
             <Text style={styles.productPrice}>${Number(item.price || 0).toFixed(2)}</Text>
-            <View style={[styles.stockBadge, Number(item.stock || 0) < Number(item.min_stock || 0) && styles.stockBadgeLow]}>
-              <Text style={[styles.stockText, Number(item.stock || 0) < Number(item.min_stock || 0) && styles.stockTextLow]}>
+            <View style={[styles.stockBadge, Number(item.stock || 0) < Number(item.stock_alert || 0) && styles.stockBadgeLow]}>
+              <Text style={[styles.stockText, Number(item.stock || 0) < Number(item.stock_alert || 0) && styles.stockTextLow]}>
                 Stock: {Number(item.stock || 0)}
               </Text>
             </View>
@@ -200,7 +200,7 @@ export default function ProductsScreen() {
         <FlatList
           data={filteredProducts}
           renderItem={renderProduct}
-          keyExtractor={(item) => item.id.toString()}
+          keyExtractor={(item, index) => `product-${item.id}-${index}`}
           contentContainerStyle={styles.list}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
         />
