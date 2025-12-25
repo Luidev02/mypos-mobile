@@ -1,8 +1,9 @@
-import { Colors } from '@/constants/theme';
+import { Colors, FontSize, FontWeight, Spacing } from '@/constants/theme';
 import { useToast } from '@/contexts/ToastContext';
 import { warehouseService } from '@/services/extended';
 import { Warehouse, CreateWarehouseRequest, UpdateWarehouseRequest } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   StyleSheet,
@@ -147,9 +148,12 @@ export default function WarehousesScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color={Colors.white} />
+        </TouchableOpacity>
         <Text style={styles.title}>Bodegas</Text>
         <TouchableOpacity style={styles.addButton} onPress={handleCreate}>
-          <Ionicons name="add" size={24} color="white" />
+          <Ionicons name="add-circle" size={32} color={Colors.white} />
         </TouchableOpacity>
       </View>
 
@@ -333,29 +337,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 8 : 16,
-    paddingBottom: 16,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    backgroundColor: Colors.primary,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.primaryDark,
+  },
+  backButton: {
+    padding: Spacing.xs,
+  },
+  title: {
+    fontSize: FontSize.xl,
+    fontWeight: FontWeight.bold,
+    color: Colors.white,
+    flex: 1,
+    marginLeft: Spacing.md,
+  },
+  addButton: {
+    padding: Spacing.xs,
+  },
+  searchContainer: {
+    padding: Spacing.md,
     backgroundColor: 'white',
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: Colors.text,
-  },
-  addButton: {
-    backgroundColor: Colors.primary,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  searchContainer: {
-    padding: 16,
-    backgroundColor: 'white',
   },
   list: {
     padding: 16,

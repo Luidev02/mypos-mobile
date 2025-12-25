@@ -1,4 +1,4 @@
-import { Colors } from '@/constants/theme';
+import { Colors, FontSize, FontWeight, Spacing } from '@/constants/theme';
 import { useToast } from '@/contexts/ToastContext';
 import { extendedProductService, categoryService, taxService } from '@/services/extended';
 import { ProductDetailed, Category, Tax } from '@/types';
@@ -22,6 +22,7 @@ import { ProductFormModal } from '@/components/ProductFormModal';
 import { SearchBar } from '@/components/SearchBar';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorState } from '@/components/ErrorState';
+import { router } from 'expo-router';
 
 export default function ProductsScreen() {
   const toast = useToast();
@@ -174,9 +175,12 @@ export default function ProductsScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color={Colors.white} />
+        </TouchableOpacity>
         <Text style={styles.title}>Productos</Text>
         <TouchableOpacity style={styles.addButton} onPress={handleCreate}>
-          <Ionicons name="add" size={24} color="white" />
+          <Ionicons name="add-circle" size={32} color={Colors.white} />
         </TouchableOpacity>
       </View>
 
@@ -242,29 +246,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 8 : 16,
-    paddingBottom: 16,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    backgroundColor: Colors.primary,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.primaryDark,
+  },
+  backButton: {
+    padding: Spacing.xs,
+  },
+  title: {
+    fontSize: FontSize.xl,
+    fontWeight: FontWeight.bold,
+    color: Colors.white,
+    flex: 1,
+    marginLeft: Spacing.md,
+  },
+  addButton: {
+    padding: Spacing.xs,
+  },
+  searchContainer: {
+    padding: Spacing.md,
     backgroundColor: 'white',
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: Colors.text,
-  },
-  addButton: {
-    backgroundColor: Colors.primary,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  searchContainer: {
-    padding: 16,
-    backgroundColor: 'white',
   },
   list: {
     padding: 16,

@@ -241,13 +241,16 @@ export default function CustomersScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color={Colors.white} />
+        </TouchableOpacity>
         <Text style={styles.title}>Clientes</Text>
         <TouchableOpacity
           style={styles.addButton}
           onPress={handleAddNew}
           activeOpacity={0.7}
         >
-          <Ionicons name="add" size={24} color={Colors.white} />
+          <Ionicons name="add-circle" size={32} color={Colors.white} />
         </TouchableOpacity>
       </View>
 
@@ -419,24 +422,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.lg,
-    paddingTop: Platform.OS === 'ios' ? 8 : Spacing.lg,
-    paddingBottom: Spacing.lg,
-    backgroundColor: Colors.white,
-    ...Shadow.sm,
+    paddingVertical: Spacing.md,
+    backgroundColor: Colors.primary,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.primaryDark,
+  },
+  backButton: {
+    padding: Spacing.xs,
   },
   title: {
-    fontSize: FontSize.xxl,
+    fontSize: FontSize.xl,
     fontWeight: FontWeight.bold,
-    color: Colors.text,
+    color: Colors.white,
+    flex: 1,
+    marginLeft: Spacing.md,
   },
   addButton: {
-    width: 44,
-    height: 44,
-    borderRadius: BorderRadius.full,
-    backgroundColor: Colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...Shadow.md,
+    padding: Spacing.xs,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -494,7 +496,11 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.lg,
     padding: Spacing.md,
     marginBottom: Spacing.md,
-    ...Shadow.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -576,7 +582,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: Spacing.lg,
     backgroundColor: Colors.white,
-    ...Shadow.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   modalTitle: {
     fontSize: FontSize.xl,

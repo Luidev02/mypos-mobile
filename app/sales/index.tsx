@@ -1,4 +1,4 @@
-import { Colors } from '@/constants/theme';
+import { Colors, FontSize, FontWeight, Spacing } from '@/constants/theme';
 import { useToast } from '@/contexts/ToastContext';
 import { salesService } from '@/services/extended';
 import { SaleDetailed } from '@/types';
@@ -153,9 +153,12 @@ export default function SalesScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
-        <Text style={styles.title}>Historial de Ventas</Text>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color={Colors.white} />
+        </TouchableOpacity>
+        <Text style={styles.title}>Ventas</Text>
         <TouchableOpacity style={styles.addButton} onPress={() => router.push('/(tabs)')}>
-          <Ionicons name="add" size={24} color="white" />
+          <Ionicons name="add-circle" size={32} color={Colors.white} />
         </TouchableOpacity>
       </View>
 
@@ -229,31 +232,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 8 : 16,
-    paddingBottom: 16,
-    backgroundColor: 'white',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    backgroundColor: Colors.primary,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: Colors.primaryDark,
+  },
+  backButton: {
+    padding: Spacing.xs,
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: Colors.text,
+    fontSize: FontSize.xl,
+    fontWeight: FontWeight.bold,
+    color: Colors.white,
+    flex: 1,
+    marginLeft: Spacing.md,
   },
   addButton: {
-    backgroundColor: Colors.primary,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: Spacing.xs,
   },
   filterContainer: {
     flexDirection: 'row',
-    padding: 16,
-    gap: 8,
+    padding: Spacing.md,
+    gap: Spacing.xs,
     backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
   },
   filterButton: {
     flex: 1,

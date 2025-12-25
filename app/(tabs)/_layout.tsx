@@ -72,6 +72,7 @@ export default function TabLayout() {
         name="hub"
         options={{
           href: null, // Hide from tab bar
+          tabBarStyle: { display: 'none' },
         }}
       />
     </Tabs>

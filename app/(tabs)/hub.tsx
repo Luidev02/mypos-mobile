@@ -1,8 +1,9 @@
-import { Colors } from '@/constants/theme';
+import { Colors, FontSize, FontWeight, Spacing } from '@/constants/theme';
+import { useAuth } from '@/contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface ModuleCard {
   id: string;
@@ -29,6 +30,8 @@ const modules: ModuleCard[] = [
 ];
 
 export default function HubScreen() {
+  const { logout, user } = useAuth();
+
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return 'Buenos días';
@@ -36,10 +39,36 @@ export default function HubScreen() {
     return 'Buenas noches';
   };
 
+  const handleLogout = () => {
+    Alert.alert(
+      'Cerrar Sesión',
+      '¿Estás seguro de que deseas salir?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Salir',
+          style: 'destructive',
+          onPress: () => logout(),
+        },
+      ]
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Header Bar */}
+      <View style={styles.topBar}>
+        <View style={styles.topBarLeft}>
+          <Ionicons name="apps" size={24} color={Colors.white} />
+          <Text style={styles.topBarTitle}>MyPOS</Text>
+        </View>
+        <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
+          <Ionicons name="log-out-outline" size={24} color={Colors.white} />
+        </TouchableOpacity>
+      </View>
+
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.header}>
+        <View style={styles.welcomeSection}>
           <Text style={styles.greeting}>{getGreeting()}</Text>
           <Text style={styles.subtitle}>Selecciona un módulo para comenzar</Text>
         </View>
@@ -69,20 +98,43 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  scrollContent: {
-    padding: 16,
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.primary,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.primaryDark,
   },
-  header: {
-    marginBottom: 24,
+  topBarLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  topBarTitle: {
+    fontSize: FontSize.xl,
+    fontWeight: FontWeight.bold,
+    color: Colors.white,
+  },
+  logoutButton: {
+    padding: Spacing.xs,
+  },
+  scrollContent: {
+    padding: Spacing.lg,
+  },
+  welcomeSection: {
+    marginBottom: Spacing.xl,
   },
   greeting: {
-    fontSize: 28,
-    fontWeight: 'bold',
+    fontSize: FontSize.xxxl,
+    fontWeight: FontWeight.bold,
     color: Colors.text,
-    marginBottom: 8,
+    marginBottom: Spacing.xs,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: FontSize.md,
     color: Colors.textLight,
   },
   grid: {
