@@ -1,28 +1,26 @@
-import { Colors, FontSize, FontWeight, Spacing } from '@/constants/theme';
-import { useToast } from '@/contexts/ToastContext';
-import { extendedProductService, categoryService, taxService } from '@/services/extended';
-import { ProductDetailed, Category, Tax } from '@/types';
-import { ProductImage } from '@/components/ProductImage';
-import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useState } from 'react';
-import {
-  StyleSheet,
-  Text,
-  View,
-  TouchableOpacity,
-  FlatList,
-  ActivityIndicator,
-  Image,
-  RefreshControl,
-  Platform,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { ConfirmModal } from '@/components/ConfirmModal';
-import { ProductFormModal } from '@/components/ProductFormModal';
-import { SearchBar } from '@/components/SearchBar';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorState } from '@/components/ErrorState';
+import { ProductFormModal } from '@/components/ProductFormModal';
+import { ProductImage } from '@/components/ProductImage';
+import { SearchBar } from '@/components/SearchBar';
+import { Colors, FontSize, FontWeight, Spacing } from '@/constants/theme';
+import { useToast } from '@/contexts/ToastContext';
+import { categoryService, extendedProductService, taxService } from '@/services/extended';
+import { Category, ProductDetailed, Tax } from '@/types';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    FlatList,
+    RefreshControl,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ProductsScreen() {
   const toast = useToast();

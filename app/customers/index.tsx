@@ -1,4 +1,4 @@
-import { BorderRadius, Colors, FontSize, FontWeight, Shadow, Spacing } from '@/constants/theme';
+import { BorderRadius, Colors, FontSize, FontWeight, Spacing } from '@/constants/theme';
 import { posService } from '@/services';
 import type { Customer } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,8 +14,7 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    View,
-    Platform,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 

@@ -1,28 +1,27 @@
+import { ConfirmModal } from '@/components/ConfirmModal';
+import { EmptyState } from '@/components/EmptyState';
+import { ErrorState } from '@/components/ErrorState';
+import { SearchBar } from '@/components/SearchBar';
 import { Colors, FontSize, FontWeight, Spacing } from '@/constants/theme';
 import { useToast } from '@/contexts/ToastContext';
 import { warehouseService } from '@/services/extended';
-import { Warehouse, CreateWarehouseRequest, UpdateWarehouseRequest } from '@/types';
+import { CreateWarehouseRequest, UpdateWarehouseRequest, Warehouse } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  StyleSheet,
-  Text,
-  View,
-  TouchableOpacity,
-  FlatList,
-  ActivityIndicator,
-  RefreshControl,
-  Modal,
-  TextInput,
-  ScrollView,
-  Platform,
+    ActivityIndicator,
+    FlatList,
+    Modal,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ConfirmModal } from '@/components/ConfirmModal';
-import { SearchBar } from '@/components/SearchBar';
-import { EmptyState } from '@/components/EmptyState';
-import { ErrorState } from '@/components/ErrorState';
 
 export default function WarehousesScreen() {
   const toast = useToast();
