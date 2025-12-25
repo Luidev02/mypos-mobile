@@ -2,7 +2,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { ErrorState } from '@/components/ErrorState';
 import { ProductImage } from '@/components/ProductImage';
 import { SearchBar } from '@/components/SearchBar';
-import { BorderRadius, Colors, FontSize, FontWeight, Shadow, Spacing } from '@/constants/theme';
+import { BorderRadius, Colors, FontSize, FontWeight, Spacing } from '@/constants/theme';
 import { extendedProductService, inventoryService } from '@/services';
 import { extendedInventoryService } from '@/services/extended';
 import type { CreateInventoryAdjustmentRequest, InventoryItem, ProductDetailed } from '@/types';
@@ -266,6 +266,17 @@ export default function InventoryScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color={Colors.white} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Inventario</Text>
+        <TouchableOpacity onPress={handleOpenQuickAdjust} style={styles.addButton}>
+          <Ionicons name="add-circle" size={32} color={Colors.white} />
+        </TouchableOpacity>
+      </View>
+
       {/* Stats Cards */}
       <View style={styles.statsContainer}>
         <View style={styles.statCard}>
@@ -538,19 +549,26 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: Spacing.lg,
-    backgroundColor: Colors.white,
-    ...Shadow.sm,
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    backgroundColor: Colors.primary,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.primaryDark,
   },
   backButton: {
-    marginRight: Spacing.md,
+    padding: Spacing.xs,
   },
   headerTitle: {
     fontSize: FontSize.xl,
     fontWeight: FontWeight.bold,
-    color: Colors.text,
+    color: Colors.white,
+    flex: 1,
+    marginLeft: Spacing.md,
+  },
+  addButton: {
+    padding: Spacing.xs,
   },
   statsContainer: {
     flexDirection: 'row',
@@ -564,7 +582,11 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     padding: Spacing.md,
     alignItems: 'center',
-    ...Shadow.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   statCardWarning: {
     backgroundColor: '#FEF3C7',
@@ -648,7 +670,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: Spacing.lg,
     backgroundColor: Colors.white,
-    ...Shadow.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   modalTitle: {
     fontSize: FontSize.xl,
@@ -791,7 +817,11 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     padding: Spacing.md,
     marginBottom: Spacing.sm,
-    ...Shadow.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   productImage: {
     width: 60,

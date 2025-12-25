@@ -29,16 +29,25 @@ export default function TabLayout() {
           height: 60,
           paddingBottom: 8,
           paddingTop: 8,
+          display: 'none', // Ocultar tab bar por defecto
         },
       }}>
       <Tabs.Screen
         name="index"
         options={{
+          title: 'Inicio',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'apps' : 'apps-outline'} size={24} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="pos"
+        options={{
           title: 'POS',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'cart' : 'cart-outline'} size={24} color={color} />
           ),
-          tabBarStyle: { display: 'none' },
         }}
       />
       <Tabs.Screen
@@ -66,13 +75,6 @@ export default function TabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'menu' : 'menu-outline'} size={24} color={color} />
           ),
-        }}
-      />
-      <Tabs.Screen
-        name="hub"
-        options={{
-          href: null, // Hide from tab bar
-          tabBarStyle: { display: 'none' },
         }}
       />
     </Tabs>

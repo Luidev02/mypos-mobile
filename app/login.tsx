@@ -26,7 +26,7 @@ export default function LoginScreen() {
   // Redirigir al hub si ya está autenticado
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      router.replace('/(tabs)/hub');
+      router.replace('/(tabs)/');
     }
   }, [isAuthenticated, authLoading]);
 
@@ -39,7 +39,7 @@ export default function LoginScreen() {
     setIsLoading(true);
     try {
       await login(username.trim(), password);
-      router.replace('/(tabs)/hub');
+      router.replace('/(tabs)/');
     } catch (error: any) {
       Alert.alert(
         'Error de Autenticación',

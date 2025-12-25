@@ -39,7 +39,7 @@ export default function MoreScreen() {
       icon: 'apps-outline',
       title: 'Hub Principal',
       subtitle: 'Ver todos los módulos',
-      onPress: () => router.push('/(tabs)/hub'),
+      onPress: () => router.push('/'),
     },
     {
       icon: 'person-outline',
@@ -119,7 +119,7 @@ export default function MoreScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity 
-          onPress={() => router.replace('/(tabs)/hub')}
+          onPress={() => router.replace('/(tabs)/')}
           style={styles.backButton}
         >
           <Ionicons name="arrow-back" size={24} color={Colors.text} />

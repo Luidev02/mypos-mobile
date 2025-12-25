@@ -156,7 +156,7 @@ export default function SalesScreen() {
           <Ionicons name="arrow-back" size={24} color={Colors.white} />
         </TouchableOpacity>
         <Text style={styles.title}>Ventas</Text>
-        <TouchableOpacity style={styles.addButton} onPress={() => router.push('/(tabs)')}>
+        <TouchableOpacity style={styles.addButton} onPress={() => router.push('/(tabs)/pos')}>
           <Ionicons name="add-circle" size={32} color={Colors.white} />
         </TouchableOpacity>
       </View>
@@ -202,7 +202,7 @@ export default function SalesScreen() {
           title="No hay ventas"
           message="Las ventas aparecerán aquí"
           actionLabel="Nueva Venta"
-          onAction={() => router.push('/(tabs)')}
+          onAction={() => router.push('/(tabs)/pos')}
         />
       ) : (
         <FlatList
