@@ -18,7 +18,8 @@
       "infoPlist": {
         "NSCameraUsageDescription": "myPOS usa la cámara para escanear códigos de barras de productos en el punto de venta.",
         "NSPhotoLibraryUsageDescription": "myPOS usa tu galería para seleccionar imágenes de productos y categorías."
-      }
+      },
+      "bundleIdentifier": "com.clicfstudios.mypos"
     },
     "android": {
       "adaptiveIcon": {
@@ -27,7 +28,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.clicfstudios.hiropos",
+      "package": "com.clicfstudios.mypos",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_MEDIA_IMAGES"
