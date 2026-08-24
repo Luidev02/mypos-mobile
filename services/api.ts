@@ -18,6 +18,9 @@ class ApiService {
    */
   private refreshPromise: Promise<string | null> | null = null;
 
+  /** Evita que N peticiones fallidas disparen N cierres de sesión seguidos. */
+  private loggingOut = false;
+
   constructor() {
     this.api = axios.create({
       baseURL: API_CONFIG.BASE_URL,
@@ -65,15 +68,17 @@ class ApiService {
       (response) => response,
       async (error: AxiosError<any>) => {
         const status = error.response?.status;
-        const code = error.response?.data?.code;
         const original: any = error.config;
 
-        // 401 = fallo de autenticación. Si el motivo es que el access token
-        // expiró, se intenta renovar y reintentar la petición UNA vez; el
-        // resto de motivos (token inválido, refresh reutilizado, dispositivo
-        // distinto) no tienen arreglo posible desde el cliente.
-        if (status === 401 && original && !original._retriedAfterRefresh) {
-          if (code === 'TOKEN_EXPIRED' || code === 'TOKEN_MISSING') {
+        // 401 = fallo de autenticación. SIEMPRE se intenta renovar con el
+        // refresh token, sea cual sea el `code`: da igual si el access token
+        // expiró, es inválido o no se mandó — si hay un refresh válido la
+        // sesión se puede salvar, y si no lo hay, `refreshAccessToken()`
+        // devuelve null y se cierra sesión. Distinguir por `code` dejaba
+        // fuera casos recuperables (por ejemplo un access token corrupto
+        // junto a un refresh perfectamente válido).
+        if (status === 401) {
+          if (original && !original._retriedAfterRefresh) {
             const newToken = await this.refreshAccessToken();
 
             if (newToken) {
@@ -83,11 +88,7 @@ class ApiService {
             }
           }
 
-          await this.forceLogout();
-          return Promise.reject(error);
-        }
-
-        if (status === 401) {
+          // Refresh imposible o ya reintentado: la sesión está muerta.
           await this.forceLogout();
           return Promise.reject(error);
         }
@@ -148,9 +149,22 @@ class ApiService {
     return this.refreshPromise;
   }
 
+  /** Cierra la sesión de forma idempotente: si ya se está cerrando, no repite. */
   private async forceLogout(): Promise<void> {
-    await storageService.clearAuth();
-    router.replace('/login');
+    if (this.loggingOut) return;
+    this.loggingOut = true;
+
+    try {
+      await storageService.clearAuth();
+      // Avisar ANTES de navegar: así AuthContext ya tiene `user = null` cuando
+      // la pantalla de login evalúa si debe rebotar al hub.
+      appEvents.emit(APP_EVENTS.SESSION_EXPIRED);
+      router.replace('/login');
+    } finally {
+      // Pequeño margen para que no se encadenen varios cierres por las
+      // peticiones que sigan cayendo con 401 justo después.
+      setTimeout(() => { this.loggingOut = false; }, 1000);
+    }
   }
 
   /**
@@ -167,6 +181,16 @@ class ApiService {
     if (!refreshToken) return null;
 
     return this.refreshAccessToken();
+  }
+
+  /**
+   * Cabecera Authorization solo si hay token. Antes se interpolaba siempre
+   * (`Bearer ${token}`), así que sin sesión se mandaba literalmente
+   * "Bearer null": el backend lo trataba como TOKEN_INVALID en vez de
+   * TOKEN_MISSING, que es lo que realmente ocurría.
+   */
+  private static authHeader(token: string | null): Record<string, string> {
+    return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
   // Public methods without token
@@ -187,7 +211,7 @@ class ApiService {
       ...config,
       headers: {
         ...config?.headers,
-        Authorization: `Bearer ${token}`,
+        ...ApiService.authHeader(token),
       },
     });
     return response.data;
@@ -199,7 +223,7 @@ class ApiService {
     // Handle FormData
     const headers: any = {
       ...config?.headers,
-      Authorization: `Bearer ${token}`,
+      ...ApiService.authHeader(token),
     };
     
     if (data instanceof FormData) {
@@ -219,7 +243,7 @@ class ApiService {
     // Handle FormData
     const headers: any = {
       ...config?.headers,
-      Authorization: `Bearer ${token}`,
+      ...ApiService.authHeader(token),
     };
     
     if (data instanceof FormData) {
@@ -239,7 +263,7 @@ class ApiService {
       ...config,
       headers: {
         ...config?.headers,
-        Authorization: `Bearer ${token}`,
+        ...ApiService.authHeader(token),
       },
     });
     return response.data;
@@ -251,7 +275,7 @@ class ApiService {
       ...config,
       headers: {
         ...config?.headers,
-        Authorization: `Bearer ${token}`,
+        ...ApiService.authHeader(token),
       },
     });
     return response.data;

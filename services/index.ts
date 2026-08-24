@@ -90,8 +90,15 @@ class AuthService {
   }
 
   async isAuthenticated(): Promise<boolean> {
-    const token = await storageService.getToken();
-    return !!token;
+    // Basta con tener refresh token: el access token puede faltar o estar
+    // caducado y aun así la sesión es recuperable — `services/api.ts` pide uno
+    // nuevo antes de la primera petición. Mirar solo el access token
+    // (comportamiento anterior) mandaba al login a usuarios con sesión válida.
+    const [token, refreshToken] = await Promise.all([
+      storageService.getToken(),
+      storageService.getRefreshToken(),
+    ]);
+    return !!(token || refreshToken);
   }
 }
 

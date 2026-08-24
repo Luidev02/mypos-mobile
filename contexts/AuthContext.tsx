@@ -1,6 +1,7 @@
 import { authService } from '@/services';
 import { storageService } from '@/services/storage';
 import type { User } from '@/types';
+import { APP_EVENTS, appEvents } from '@/utils/events';
 import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 
 interface AuthContextType {
@@ -25,6 +26,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   useEffect(() => {
     checkAuth();
+
+    // `services/api.ts` limpia el almacenamiento y navega a /login cuando una
+    // sesión muere, pero no puede tocar este estado. Sin esta suscripción el
+    // usuario seguía en memoria, la pantalla de login lo veía autenticado y
+    // rebotaba al hub, que volvía a dar 401: un bucle entre login y hub.
+    const unsubscribe = appEvents.on(APP_EVENTS.SESSION_EXPIRED, () => {
+      setUser(null);
+      setIsLoading(false);
+    });
+    return unsubscribe;
   }, []);
 
   const checkAuth = async () => {
@@ -33,9 +44,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (isAuth) {
         const currentUser = await authService.getCurrentUser();
         setUser(currentUser);
+      } else {
+        // Sin credenciales utilizables: si quedaban restos (por ejemplo el
+        // userInfo de una sesión anterior sin token), se descartan para no
+        // aparentar una sesión que ya no existe.
+        setUser(null);
+        await storageService.clearAuth();
       }
     } catch (error) {
       console.error('Error checking auth:', error);
+      setUser(null);
     } finally {
       setIsLoading(false);
     }

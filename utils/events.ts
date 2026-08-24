@@ -28,4 +28,13 @@ export const appEvents = new EventBus();
 /** Eventos usados por la app — nombres calcados del CustomEvent del web. */
 export const APP_EVENTS = {
   SUBSCRIPTION_BLOCKED: 'subscription:blocked',
+  /**
+   * La sesión dejó de ser válida y ya se limpió el almacenamiento.
+   *
+   * Sin este evento, `services/api.ts` borraba el token y navegaba a /login,
+   * pero `AuthContext` seguía con el usuario en memoria: la pantalla de login
+   * veía `isAuthenticated === true` y rebotaba al hub, que volvía a dar 401.
+   * Un ping-pong infinito entre login y hub.
+   */
+  SESSION_EXPIRED: 'session:expired',
 } as const;
