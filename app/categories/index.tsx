@@ -7,7 +7,8 @@ import { categoryService } from '@/services';
 import type { CategoryDetailed } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CategoryImage } from '@/components/CategoryImage';
@@ -20,9 +21,13 @@ export default function CategoriesScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadCategories();
-  }, []);
+  // Al volver de crear/editar una categoría (app/categories/new.tsx) la
+  // lista debe reflejar el cambio sin necesidad de un pull-to-refresh manual.
+  useFocusEffect(
+    useCallback(() => {
+      loadCategories();
+    }, [])
+  );
 
   useEffect(() => {
     filterCategories();
@@ -154,6 +159,7 @@ export default function CategoriesScreen() {
         data={filteredCategories}
         renderItem={renderCategoryItem}
         keyExtractor={(item) => item.id.toString()}
+        style={styles.listBody}
         contentContainerStyle={styles.listContent}
         refreshControl={
           <RefreshControl
@@ -177,7 +183,7 @@ export default function CategoriesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.primary,
   },
   header: {
     flexDirection: 'row',
@@ -210,6 +216,10 @@ const styles = StyleSheet.create({
   searchContainer: {
     padding: Spacing.md,
     backgroundColor: Colors.white,
+  },
+  listBody: {
+    flex: 1,
+    backgroundColor: Colors.background,
   },
   listContent: {
     padding: Spacing.md,

@@ -12,13 +12,18 @@ export interface User {
 export interface LoginRequest {
   username: string;
   password: string;
-  ip_connection: string;
+  /** @deprecated El backend usa `req.ip`; se mantiene opcional por clientes viejos. */
+  ip_connection?: string;
 }
 
 export interface LoginResponse {
   status: number;
   message: string;
   token: string;
+  /** Refresh token opaco. 30 días en móvil, 7 en web. */
+  refreshToken?: string;
+  /** Segundos de vida del access token (900 = 15 min). */
+  expiresIn?: number;
   info: User;
 }
 
@@ -36,6 +41,17 @@ export interface Product {
   tax_id: number;
   is_active: boolean;
   image_url?: string;
+  /**
+   * 'variable' = el stock puede quedar en negativo (carnicería, fruver…).
+   * El backend solo permite venta por debajo de cero en este caso.
+   */
+  stock_type?: 'fixed' | 'variable';
+  /** 1/0 derivado por el backend: unidad de medida distinta de "Unidad". */
+  is_weighable?: number | boolean;
+  unit_measure_id?: number;
+  /** Código DIAN: '94' (und), 'KGM', 'LBR', 'GLL'. */
+  unit_measure_code?: string;
+  unit_measure_name?: string;
 }
 
 export interface Category {
@@ -47,33 +63,39 @@ export interface Category {
 }
 
 // Customer Types
+/** `ident_type` real de la BD (`customers.ident_type`): no incluye 'TI'. */
+export type CustomerIdentType = 'CC' | 'NIT' | 'CE' | 'PASAPORTE';
+
 export interface Customer {
   id: number;
   name: string;
   ident: string;
-  ident_type: 'CC' | 'NIT' | 'CE' | 'TI';
+  ident_type: CustomerIdentType;
+  /** Dígito de verificación — solo aplica/se pide si `ident_type === 'NIT'`. */
+  dv?: string;
   email?: string;
   phone?: string;
   address?: string;
-  city?: string;
-  status: 'active' | 'inactive';
   is_company?: number;
-  // Campos legacy para compatibilidad
-  nit?: string;
-  identification?: string;
-  identification_type?: 'CC' | 'NIT' | 'CE' | 'TI';
-  is_active?: boolean;
+  requires_electronic_invoice?: boolean | number;
+  municipality_id?: number;
+  municipality_name?: string;
+  municipality_department?: string;
+  status: 'active' | 'suspend' | 'disable';
 }
 
 export interface CreateCustomerRequest {
   name: string;
   ident: string;
-  ident_type: 'CC' | 'NIT' | 'CE' | 'TI';
+  ident_type: CustomerIdentType;
+  dv?: string;
   phone?: string;
   email?: string;
   address?: string;
-  city?: string;
   is_company?: number;
+  requires_electronic_invoice?: boolean;
+  municipality_id?: number | null;
+  status?: 'active' | 'suspend' | 'disable';
 }
 
 // Coupon Types
@@ -162,6 +184,7 @@ export interface Sale {
   tax: number;
   tax_amount?: number; // Alias de tax
   discount: number;
+  discount_amount?: number; // Nombre real que usa `GET /api/sales`
   total: number;
   total_amount?: number; // Alias de total
   change?: number;
@@ -171,9 +194,51 @@ export interface Sale {
   created_at: string;
   items_count?: number;
   items?: SaleItem[];
+  /** Ganancia de la venta — `SUM((price - unit_cost) * quantity)` de sus líneas. */
+  profit_total?: number;
+  warehouse_id?: number;
+  warehouse_name?: string;
+  created_by_name?: string;
+  // Campos DIAN — `GET /api/sales` y `GET /api/sales/:id` los devuelven igual;
+  // `dian_status` siempre viene presente (default `'not_applicable'`, nunca undefined).
+  dian_status?: DianStatus;
+  cufe?: string | null;
+  dian_pdf_url?: string | null;
+  dian_response_message?: string | null;
+  sale_type?: string; // carry, delivery, dine_in — presente en órdenes pausadas/retomadas
+  coupon_id?: number | null;
 }
 
 // Shift Types
+/**
+ * Desglose de ventas por método de pago para un turno cerrado
+ * (`shifts.repository.js#getShiftSalesSummary`, adjunto por
+ * `GET /api/shifts/history/me` en cada turno cerrado).
+ *
+ * OJO: `total_profit` acá (y el `shift.total_profit` de nivel superior, la
+ * columna `cash_shifts.total_profit`) suma la ganancia de TODAS las ventas del
+ * turno sin importar el método de pago — es el mismo bug que describe
+ * `CIERRE_CAJA_FIX.md` del backend, cuyo fix quedó aplicado solo en esta
+ * consulta de solo-lectura y nunca se corrigió en `incrementShiftProfit`
+ * (el acumulador real que escribe `cash_shifts.total_profit` en cada venta).
+ * Por eso la UI de turnos usa `cash_profit` (ganancia de solo las ventas en
+ * efectivo) para "Ganancia", no `total_profit` — es el número que sí es
+ * correcto para el arqueo de caja.
+ */
+export interface ShiftSalesSummary {
+  total_sales: number;
+  total_amount: number;
+  cash_sales: number;
+  card_sales: number;
+  transfer_sales: number;
+  credit_sales: number;
+  total_profit: number;
+  cash_profit: number;
+  card_profit: number;
+  transfer_profit: number;
+  credit_profit: number;
+}
+
 export interface Shift {
   id: number;
   user_id: number;
@@ -193,6 +258,9 @@ export interface Shift {
   status: 'open' | 'closed';
   notes?: string;
   hours_worked?: number;
+  /** Solo presente en turnos cerrados devueltos por `GET /api/shifts/history/me`. */
+  total_profit?: number;
+  sales_summary?: ShiftSalesSummary;
 }
 
 export interface OpenShiftRequest {
@@ -205,14 +273,53 @@ export interface CloseShiftRequest {
   notes?: string;
 }
 
-// Cash Register Types
+// Cash Register Types — `cash_registers` no tiene `description` ni `created_at`
+// (confirmado en el schema); el listado del POS (`getCashRegisters`) solo
+// devuelve id/name/code/is_active, el detalle (`getCashRegisterById`) además
+// trae `warehouse_id`/`warehouse_name` por el JOIN con `warehouses`.
 export interface CashRegister {
   id: number;
   name: string;
   code: string;
-  description?: string;
   is_active: boolean;
-  created_at?: string;
+  warehouse_id?: number;
+  warehouse_name?: string;
+}
+
+export interface CreateCashRegisterRequest {
+  name: string;
+  code: string;
+  is_active?: boolean;
+}
+
+export interface UpdateCashRegisterRequest {
+  name: string;
+  code: string;
+  is_active?: boolean;
+}
+
+// `GET /api/company/plan/usage` — verificado contra `plans.config.js` real.
+export interface PlanUsage {
+  plan: string;
+  planConfig: {
+    id?: string;
+    name?: string;
+    priceMonthly?: number;
+    maxUsers?: number;
+    initialDianInvoices?: number;
+    inventoryLevel?: string;
+    multiCash?: boolean;
+    multiBranch?: boolean;
+    analytics?: boolean;
+    supportLevel?: string;
+    [key: string]: any;
+  };
+  dian?: {
+    quota: number;
+    used: number;
+    remaining: number;
+    blocked: boolean;
+  } | null;
 }
 
 // Inventory Types
@@ -241,18 +348,65 @@ export interface InventoryMovement {
 }
 
 // Report Types
-export interface SalesReport {
+// Reportes — verificado contra `reports.repository.js`. El backend solo
+// implementa 4 tipos (`sales`, `inventory`, `purchases`, `top-products`);
+// cualquier otro `type` responde 400 "Tipo de reporte inválido". Cada fila
+// es un registro plano (una orden, un producto...), nunca un agregado — el
+// resumen se calcula en el cliente (ver `calculateSalesSummary`).
+
+// GET /api/reports/sales — una fila por venta.
+export interface SalesReportRow {
+  id: number;
+  invoice_number: string;
   date: string;
-  total_sales: number;
-  total_revenue: number;
-  total_transactions: number;
+  customer_name?: string;
+  customer_ident?: string;
+  seller?: string;
+  subtotal: number;
+  discount: number;
+  tax_total: number;
+  total: number;
+  payment_method: string;
+  status: string;
 }
 
-export interface TopProduct {
-  product_id: number;
-  product_name: string;
-  quantity_sold: number;
-  revenue: number;
+// GET /api/reports/top-products — el backend ignora `limit`, siempre trae
+// hasta 50 filas (`LIMIT 50` fijo en el SQL).
+export interface TopProductRow {
+  id: number;
+  sku: string;
+  title: string;
+  price: number;
+  category?: string;
+  total_sold: number;
+  total_revenue: number;
+  order_count: number;
+}
+
+// GET /api/reports/inventory
+export interface InventoryReportRow {
+  id: number;
+  sku: string;
+  title: string;
+  barcode?: string;
+  category?: string;
+  cost: number;
+  price: number;
+  stock_alert: number;
+  warehouse: string;
+  quantity: number;
+  reserved: number;
+  available: number;
+  inventory_value: number;
+  status: string;
+}
+
+export interface SalesReportSummary {
+  totalVentas: number;
+  subtotal: number;
+  descuentos: number;
+  impuestos: number;
+  total: number;
 }
 
 // Extended Category Types
@@ -302,6 +456,10 @@ export interface CreateProductRequest {
   image?: File | any; // FormData
   is_inventory_managed?: boolean;
   status?: 'active' | 'inactive';
+  /** id en ref_measurement_units — 70 = Unidad. Define si el producto es pesable. */
+  unit_measure_id?: number;
+  /** 'variable' permite vender aunque el stock quede en negativo (carnicería, fruver). */
+  stock_type?: 'fixed' | 'variable';
 }
 
 export interface UpdateProductRequest extends Partial<CreateProductRequest> {
@@ -309,27 +467,63 @@ export interface UpdateProductRequest extends Partial<CreateProductRequest> {
 }
 
 // Extended Customer Types
-export interface CustomerDetailed extends Customer {
-  ident?: string; // Número de identificación
-  ident_type?: 'CC' | 'NIT' | 'CE' | 'TI' | 'PASSPORT';
-  status?: 'active' | 'inactive';
-  created_at?: string;
-  total_purchases?: number;
-  total_spent?: number;
-}
+// `getAllCustomers`/`getCustomerById` no traen fecha de creación ni
+// totales de compras — el propio `customers/detail.jsx` del web tampoco
+// los muestra, así que no se inventan aquí.
+export type CustomerDetailed = Customer;
 
 export interface UpdateCustomerRequest extends Partial<CreateCustomerRequest> {
   id: number;
-  status?: 'active' | 'inactive';
 }
 
 // Extended Sale Types
 export interface SaleDetailed extends Sale {
-  warehouse_name?: string;
-  warehouse_id?: number;
-  created_by_name?: string;
   customer_identification?: string;
+  customer_ident_type?: string;
+  customer_email?: string;
+  customer_address?: string;
+  // Resolución de facturación (`invoicing_resolutions`, vía JOIN) — solo
+  // relevante cuando `dian_status === 'not_applicable'` (factura POS, no
+  // electrónica): es la autorización de numeración, no un estado DIAN.
+  resolution_auth_number?: string;
+  resolution_prefix?: string;
+  resolution_from?: number;
+  resolution_to?: number;
+  resolution_type?: string;
+  company_name?: string;
+  company_trade_name?: string;
+  company_nit?: string;
+  company_dv?: string;
   items: SaleItemDetailed[];
+}
+
+// `GET /api/dian/status/:orderId` — respuesta cruda (bypassa ResponseHandler),
+// solo trae el núcleo DIAN, no toda la venta.
+export interface DianStatusResponse {
+  id: number;
+  cufe: string | null;
+  dian_pdf_url: string | null;
+  dian_status: DianStatus;
+  dian_response_message: string | null;
+}
+
+// `POST /api/dian/retry/:orderId` — también cruda: `{ ok:true, data: {...} }`
+// en éxito de transporte, o `{ ok:false, message }` en error. `data.ok` es el
+// resultado real del reintento — si el pedido no estaba en un estado
+// reintentable (`not_sent`/`rejected`), `data.ok` es `false` con `data.error`
+// explicando por qué, sin `data.result`.
+export interface DianRetryResponse {
+  ok: boolean;
+  message?: string;
+  data?: {
+    ok: boolean;
+    result?: {
+      dian_status: DianStatus;
+      cufe: string | null;
+      dian_response_message: string | null;
+    };
+    error?: string;
+  };
 }
 
 export interface SaleItemDetailed extends SaleItem {
@@ -337,6 +531,11 @@ export interface SaleItemDetailed extends SaleItem {
   sku?: string;
   subtotal?: number;
   tax?: number;
+  tax_amount?: number;
+  tax_name?: string;
+  unit_cost?: number;
+  /** Ganancia de la línea — `(price - unit_cost) * quantity`. */
+  profit_total?: number;
 }
 
 // Warehouse Types
@@ -371,6 +570,21 @@ export interface WarehouseStock {
   quantity: number;
   location_in_warehouse?: string;
   stock_alert?: number;
+  unit_measure_id?: number;
+  unit_measure_code?: string;
+  unit_measure_name?: string;
+  is_weighable?: number | boolean;
+}
+
+// Shape real de `getLowStockProducts` (product_stock.repository.js)
+export interface LowStockItem {
+  id: number;
+  title: string;
+  sku: string;
+  stock_alert: number;
+  warehouse_id: number;
+  warehouse_name: string;
+  quantity: number;
 }
 
 // Tax Types
@@ -411,45 +625,74 @@ export interface UpdateCouponRequest extends Partial<CreateCouponRequest> {
   id: number;
 }
 
-// Purchase Types
+// Purchase Types — verificado contra `purchases.repository.js` y el schema
+// real (`purchases`/`purchase_details` en mypos2v4.sql). El enum de estado
+// real es `ordered|received|cancelled` — ni el web (`pending|completed`) ni
+// los tipos previos de móvil (`pending|completed`) coincidían con la BD.
+export type PurchaseStatus = 'ordered' | 'received' | 'cancelled';
+
 export interface Purchase {
   id: number;
-  purchase_date: string;
+  supplier_id: number;
   supplier_name?: string;
-  invoice_number?: string;
-  total_amount: number;
-  status: 'pending' | 'completed' | 'cancelled';
+  supplier_nit?: string;
+  user_id?: number;
+  user_name?: string;
+  warehouse_id: number;
+  warehouse_name?: string;
+  /** Nombre real de columna — no `invoice_number` (así lo usa mal el propio web en el listado). */
+  invoice_number_supplier?: string;
+  purchase_date: string;
+  /** Nombre real de columna — no `total_amount`/`total_cost` (así los usan mal móvil/web). */
+  total: number;
+  status: PurchaseStatus;
   created_at?: string;
   notes?: string;
 }
 
-export interface PurchaseItem {
+/** Línea tal como la devuelve `GET /api/purchases/:id` — no lo que se envía al crear. */
+export interface PurchaseItemDetailed {
+  id: number;
+  purchase_id: number;
   product_id: number;
-  product_name?: string;
+  /** No `product_name` (así lee mal el propio `detail.jsx` del web) — la columna real es `title`, aliada `product_title`. */
+  product_title?: string;
+  sku?: string;
   quantity: number;
   unit_cost: number;
-  total: number;
+  subtotal: number;
 }
 
 export interface PurchaseDetailed extends Purchase {
-  warehouse_id?: number;
-  warehouse_name?: string;
-  items: PurchaseItem[];
+  items: PurchaseItemDetailed[];
+}
+
+/** Línea para crear una compra — el backend solo lee estos 3 campos por ítem. */
+export interface CreatePurchaseItem {
+  product_id: number;
+  quantity: number;
+  unit_cost: number;
 }
 
 export interface CreatePurchaseRequest {
-  purchase_date: string;
-  supplier_id?: number;
-  supplier_name?: string;
-  invoice_number?: string;
+  supplier_id: number;
   warehouse_id: number;
-  status?: 'pending' | 'completed' | 'cancelled';
-  items: PurchaseItem[];
-  notes?: string;
+  invoice_number_supplier?: string;
+  purchase_date: string;
+  /** El backend defaultea a `'received'` si se omite. */
+  status?: PurchaseStatus;
+  items: CreatePurchaseItem[];
 }
 
-export interface UpdatePurchaseRequest extends Partial<CreatePurchaseRequest> {
-  id: number;
+// `PUT /api/purchases/:id` — el backend NO admite actualizar `items` por
+// esta vía (`purchasesRepository.updatePurchase` nunca toca `purchase_details`).
+export interface UpdatePurchaseRequest {
+  supplier_id?: number;
+  warehouse_id?: number;
+  invoice_number_supplier?: string;
+  purchase_date?: string;
+  total?: number;
+  status?: PurchaseStatus;
 }
 
 // Inventory Adjustment Types
@@ -465,95 +708,84 @@ export interface InventoryAdjustment {
   created_by?: string;
 }
 
+/**
+ * Tipos de movimiento que `inventory.service.js` realmente reconoce en
+ * `POST /api/inventory/adjust`. El backend decide sumar o restar SOLO por el
+ * valor de `type` (ignora el signo de `quantity`, siempre usa `Math.abs`):
+ * `return` resta, cualquier otro valor ('adjustment', 'damage'...) suma.
+ * Son los 3 mismos que expone `inventory/adjust.jsx` en el web.
+ */
+export type InventoryAdjustmentType = 'adjustment' | 'damage' | 'return';
+
 export interface CreateInventoryAdjustmentRequest {
   product_id: number;
   warehouse_id: number;
+  /** Con signo tal como lo digita el usuario — el backend hace `Math.abs()`
+   *  y decide sumar/restar únicamente según `type`, no según este signo. */
   quantity: number;
-  type: 'adjustment' | 'entry' | 'exit';
-  reason?: string;
-  notes?: string;
+  type: InventoryAdjustmentType;
+  notes: string;
 }
 
+// Shape real de `im.*` (inventory_movements.repository.js) + los joins de
+// `getProductMovements`/`getWarehouseMovements`.
 export interface ProductMovement {
   id: number;
   product_id: number;
   warehouse_id: number;
-  type: 'sale' | 'purchase' | 'adjustment' | 'transfer';
+  type: 'ADJUSTMENT' | 'SALE' | 'PURCHASE' | 'TRANSFER' | 'RETURN' | 'DAMAGE' | string;
   quantity: number;
+  previous_stock: number;
+  new_stock: number;
   reference_id?: number;
   reference_type?: string;
-  reason?: string;
-  created_at: string;
-  created_by?: string;
+  total_cost?: number;
   notes?: string;
+  created_at: string;
+  user_name?: string;
+  warehouse_name?: string;
+  product_title?: string;
+  sku?: string;
+  unit_measure_id?: number;
+  unit_measure_code?: string;
+  unit_measure_name?: string;
+  is_weighable?: number | boolean;
 }
 
-// Report Types Extended
+// `group_by`/`product_id` no los lee ningún reporte real del backend — se
+// omiten (el propio web los manda sin que tengan efecto alguno).
 export interface ReportFilters {
   start_date?: string;
   end_date?: string;
-  group_by?: 'day' | 'week' | 'month';
   warehouse_id?: number;
   category_id?: number;
-  product_id?: number;
+  supplier_id?: number;
+  status?: string;
+  low_stock?: boolean;
 }
 
-export interface SalesReportData {
-  id: number;
-  invoice_number: string;
-  date: string;
-  customer_name?: string;
-  seller?: string;
-  subtotal: number;
-  discount: number;
-  tax_total: number;
-  total: number;
-  payment_method: string;
-  status: string;
-}
-
-export interface SalesReportSummary {
-  'Total Ventas': number;
-  'Subtotal': number;
-  'Descuentos': number;
-  'Impuestos': number;
-  'Total': number;
-}
-
-export interface ProductsReportData {
-  product_id: number;
-  product_name: string;
-  category: string;
-  quantity_sold: number;
-  revenue: number;
-  profit?: number;
-}
-
-export interface InventoryReportData {
-  product_id: number;
-  product_name: string;
-  sku: string;
-  warehouse: string;
-  stock: number;
-  stock_alert: number;
-  status: string;
-}
-
-// Profile Types
+// Profile Types — shape real de GET /api/profile (profile.repository.js)
 export interface UserProfile {
   id: number;
   username: string;
   email: string;
   pin_code?: string;
-  role_name?: string;
+  status: 'active' | 'inactive';
+  creation_date?: string;
+  company_id?: number;
+  company_name?: string;
   role_id?: number;
-  created_at?: string;
+  role_name?: string;
+  theme_palette?: string;
+  theme_mode?: 'light' | 'dark';
 }
 
 export interface UpdateProfileRequest {
   username?: string;
   email?: string;
   pin_code?: string;
+  theme_palette?: string;
+  theme_mode?: 'light' | 'dark';
 }
 
 export interface ChangePasswordRequest {
@@ -561,9 +793,14 @@ export interface ChangePasswordRequest {
   new_password: string;
 }
 
-// Company Types
+// Company Types — verificado contra `company.repository.js`. No existen
+// `api_client_id`/`api_client_secret` en la tabla `company` en absoluto (esa
+// era una función muerta del propio web, `formApi`/`handleSubmitApi`, nunca
+// conectada a ningún botón — no se porta).
 export interface Company {
   id: number;
+  nit?: string;
+  dv?: string;
   name: string; // Razón social
   trade_name?: string; // Nombre comercial
   address?: string;
@@ -573,48 +810,94 @@ export interface Company {
   email?: string;
   website?: string;
   logo_url?: string;
-  regimen_type?: string; // responsable_iva, regimen_simple, etc.
-  currency?: string; // COP, USD, etc.
-  api_client_id?: string;
-  api_client_secret?: string;
-  api_environment?: 'PRODUCTION' | 'SANDBOX';
+  regimen_type?: 'responsable_iva' | 'no_responsable_iva' | 'simple_tributacion';
+  currency?: 'COP' | 'USD' | 'EUR';
+  plan?: string;
+  /** Si la empresa reporta a la DIAN — decide factura POS vs. electrónica. */
+  report_dian?: 'YES' | 'NO';
+  is_active?: boolean;
+  api_environment?: 'TEST' | 'PRODUCTION';
+  creation_date?: string;
+  dian_invoices_quota?: number;
+  dian_invoices_used?: number;
 }
 
-export interface UpdateCompanyRequest extends Partial<Company> {}
+// `PUT /api/company` solo admite estos campos (whitelist real del backend) —
+// y responde `data: null`, no la empresa actualizada (hay que volver a pedir
+// `GET /api/company` tras guardar, igual que con el perfil).
+export interface UpdateCompanyRequest {
+  name?: string;
+  trade_name?: string;
+  address?: string;
+  city?: string;
+  department?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+  logo_url?: string;
+  regimen_type?: Company['regimen_type'];
+  currency?: Company['currency'];
+  report_dian?: 'YES' | 'NO';
+}
 
 // Role & Permission Types
+// Verificado contra `permissions.repository.js` — el campo real es
+// `permission_name`, no `name`; no existe ningún flag `is_granted` por
+// permiso (pertenecer o no a `role.permissions` ES el flag).
 export interface Permission {
   id: number;
-  name: string;
-  is_granted?: boolean;
+  permission_name: string;
+  description?: string;
 }
 
+// Verificado contra `roles.repository.js`. OJO: `GET /api/roles` (listado)
+// **nunca** incluye `permissions` — solo `permissions_count`. El arreglo
+// `permissions` solo viene en `GET /api/roles/:id` (detalle). Cualquier
+// pantalla que edite permisos debe pedir el detalle primero, no asumir que
+// el objeto de la lista ya los trae (si no, guardar pisa los permisos reales
+// con un arreglo vacío).
 export interface Role {
   id: number;
-  name: string;
+  company_id?: number | null;
+  role_name: string;
+  /** 1 = activo, 0 = inactivo — no es booleano en la BD. */
+  status: number;
+  users_count?: number;
+  permissions_count?: number;
+  /** Roles base del sistema (`company_id IS NULL`) — no se pueden editar ni borrar. */
+  is_system_role?: boolean;
+  /** Solo presente en el detalle (`GET /api/roles/:id`), nunca en el listado. */
   permissions?: Permission[];
-  created_at?: string;
 }
 
 export interface CreateRoleRequest {
-  name: string;
-  permissions: number[]; // Array of permission IDs
+  role_name: string;
+  status?: number;
+  /** IDs de permisos — el backend los admite inline solo al crear. */
+  permissions?: number[];
 }
 
-export interface UpdateRoleRequest extends Partial<CreateRoleRequest> {
-  id: number;
+// `PUT /api/roles/:id` solo actualiza `role_name`/`status` — los permisos
+// se guardan aparte vía `PUT /api/roles/:id/permissions` (ver `RoleService`).
+export interface UpdateRoleRequest {
+  role_name?: string;
+  status?: number;
 }
 
-// User Management Types
+// User Management Types — verificado contra `users.repository.js`.
 export interface UserManagement {
   id: number;
   username: string;
   email: string;
   role_id: number;
   role_name?: string;
-  is_active: boolean;
-  created_at?: string;
+  warehouse_id?: number;
+  warehouse_name?: string;
+  /** String, no booleano — no existe `is_active` en la respuesta real. */
+  status: 'active' | 'inactive';
+  creation_date?: string;
   pin_code?: string;
+  company_name?: string;
 }
 
 export interface CreateUserRequest {
@@ -622,13 +905,20 @@ export interface CreateUserRequest {
   email: string;
   password: string;
   role_id: number;
+  warehouse_id?: number;
   pin_code?: string;
-  is_active?: boolean;
+  status?: 'active' | 'inactive';
 }
 
-export interface UpdateUserRequest extends Partial<CreateUserRequest> {
-  id: number;
-  password?: string; // Optional
+export interface UpdateUserRequest {
+  username?: string;
+  email?: string;
+  /** Opcional — si se omite/deja vacío, el backend conserva la contraseña actual. */
+  password?: string;
+  role_id?: number;
+  warehouse_id?: number;
+  pin_code?: string;
+  status?: 'active' | 'inactive';
 }
 
 // Integration Types
@@ -682,5 +972,185 @@ export interface IntegrationStats {
 export interface IntegrationTestResponse {
   success: boolean;
   message: string;
+  data?: any;
+}
+
+// Subscription Types — shape real de GET /api/subscription/status
+// (subscription.service.js). El status 'permanent' no vence ni entra en
+// periodo de gracia; 'grace' y 'blocked' son los dos estados que la web
+// muestra con un modal bloqueante o de aviso.
+export interface Subscription {
+  status: 'active' | 'grace' | 'blocked' | 'permanent';
+  plan?: number;
+  planName?: string;
+  priceMonthly?: number;
+  subscriptionEndsAt?: string | null;
+  gracePeriodEndsAt?: string | null;
+  daysUntilExpiry?: number | null;
+  daysInGrace?: number | null;
+  isPermanent: boolean;
+  isBlocked: boolean;
+  showWarning: boolean;
+}
+
+// (`PlanUsage` ya está declarado arriba — este era un duplicado con un shape
+// ficticio, `{plan_name, limits, usage}`, que nunca coincidió con la API real.)
+
+// Invoicing Resolution Types (facturación electrónica DIAN) — verificado
+// contra `invoicing_resolutions` (mypos2v4.sql) e
+// `invoicing_resolutions.repository.js`. `type` real solo admite
+// `'POS'|'ELECTRONIC'`. `api_range_id` existe en la BD y el propio web lo
+// recolecta, pero el repositorio nunca lo incluye en el INSERT/UPDATE —
+// guardarlo no tiene ningún efecto (bug confirmado del backend, no se
+// expone como funcional en el formulario móvil).
+export interface InvoicingResolution {
+  id: number;
+  company_id?: number;
+  resolution_number: string;
+  prefix?: string;
+  start_number: number;
+  end_number: number;
+  current_number: number;
+  type: 'POS' | 'ELECTRONIC';
+  /** Requerida solo si `type === 'ELECTRONIC'`. */
+  technical_key?: string;
+  api_range_id?: number;
+  is_active: boolean;
+}
+
+export interface CreateInvoicingResolutionRequest {
+  resolution_number: string;
+  prefix?: string;
+  start_number: number;
+  end_number: number;
+  current_number?: number;
+  type: 'POS' | 'ELECTRONIC';
+  technical_key?: string;
+  is_active?: boolean;
+  /** Si ya existe otra resolución activa del mismo `type`, desactívala en vez de fallar con 409. */
+  auto_replace?: boolean;
+}
+
+export interface UpdateInvoicingResolutionRequest extends Partial<CreateInvoicingResolutionRequest> {}
+
+/** Devuelto en el 409 cuando ya hay una resolución activa del mismo `type`. */
+export interface ResolutionConflictError {
+  conflicting_resolution?: InvoicingResolution;
+}
+
+// DIAN Types
+/**
+ * Estado real que escribe `dian.service.js` (no coincide con el ENUM de
+ * `mypos2v4.sql`, que solo declara `not_applicable|not_sent|sent|accepted|rejected`
+ * — el código en producción usa `processing`/`approved`, no `sent`/`accepted`).
+ */
+export type DianStatus = 'not_sent' | 'processing' | 'approved' | 'rejected' | 'not_applicable';
+
+// Measurement Units (productos pesables)
+export interface MeasurementUnit {
+  id: number;
+  code: string; // '94', 'KGM', 'LBR', 'GLL'
+  name: string; // 'Unidad', 'Kilogramo', ...
+}
+
+// Municipality Types — shape real de `municipalities.repository.js`
+export interface Municipality {
+  id: number;
+  name: string;
+  department_name?: string;
+  code_matias?: string;
+  code_factus?: string;
+}
+
+// Supplier Types
+// Verificado contra `suppliers` (mypos2v4.sql) — no tiene `is_active`, sí
+// `contact_name`/`city` que no estaban tipados antes.
+export interface Supplier {
+  id: number;
+  nit: string;
+  name: string;
+  contact_name?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  city?: string;
+  creation_date?: string;
+}
+
+export interface CreateSupplierRequest {
+  nit: string;
+  name: string;
+  contact_name?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  city?: string;
+}
+
+export interface UpdateSupplierRequest extends Partial<CreateSupplierRequest> {}
+
+// Matias (proveedor DIAN) — verificado contra `company.service.js`. La
+// contraseña NUNCA se devuelve; `GET` solo trae el email guardado (columna
+// `integrations.api_key`, expuesta bajo la clave `email`).
+export interface MatiasConfig {
+  email?: string;
+  environment?: 'TEST' | 'PRODUCTION';
+  is_active?: boolean;
+  token_expires_at?: string | null;
+}
+
+export interface SaveMatiasConfigRequest {
+  email: string;
+  password: string;
+  environment: 'TEST' | 'PRODUCTION';
+}
+
+export interface TestMatiasConnectionResponse {
+  connected: boolean;
+  error?: string;
+}
+
+// Import / Export Types — verificado contra `import.service.js`.
+export type ImportExportEntity = 'products' | 'categories' | 'taxes';
+
+export interface ImportResultRow {
+  row: number | string;
+  field: string;
+  message: string;
+}
+
+export interface ImportResult {
+  created: number;
+  updated: number;
+  errors: ImportResultRow[];
+}
+
+// AI Assistant Types — verificado contra `mypos-ai-service/src/controllers/ai.controller.js`
+// y `mypos-ai-service/src/utils/validator.js` (backend real, no el mockup del web).
+export type AiChatRole = 'user' | 'assistant';
+
+export interface AiHistoryItem {
+  role: AiChatRole;
+  content: string;
+  intent?: string;
+  data?: any;
+}
+
+export interface AiQueryRequest {
+  message: string;
+  /** Máx. 12 entradas — el resto se recorta antes de enviar. */
+  history: AiHistoryItem[];
+}
+
+export interface AiQueryIntent {
+  intent: string;
+  parameters?: Record<string, any>;
+}
+
+export interface AiQueryResponse {
+  ok: boolean;
+  type: 'success' | 'not_allowed';
+  intent: AiQueryIntent;
+  summary: string;
   data?: any;
 }

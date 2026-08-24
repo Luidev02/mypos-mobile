@@ -1,4 +1,5 @@
 import { authService } from '@/services';
+import { storageService } from '@/services/storage';
 import type { User } from '@/types';
 import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 
@@ -8,6 +9,8 @@ interface AuthContextType {
   isLoading: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  /** Actualiza campos del usuario en memoria y en storage (tras editar perfil). */
+  updateUserInfo: (patch: Partial<User>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -48,6 +51,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setUser(null);
   };
 
+  const updateUserInfo = async (patch: Partial<User>) => {
+    setUser((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, ...patch };
+      storageService.saveUserInfo(next);
+      return next;
+    });
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -56,6 +68,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         isLoading,
         login,
         logout,
+        updateUserInfo,
       }}
     >
       {children}

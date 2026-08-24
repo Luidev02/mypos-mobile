@@ -7,7 +7,6 @@ import {
     ActivityIndicator,
     Alert,
     Modal,
-    SafeAreaView,
     ScrollView,
     StyleSheet,
     Text,
@@ -15,12 +14,13 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface CustomerModalProps {
   visible: boolean;
   onClose: () => void;
   currentCustomer: string;
-  onSelectCustomer: (name: string, customerId: number) => void;
+  onSelectCustomer: (name: string, customerId: number, requiresElectronicInvoice?: boolean) => void;
 }
 
 export default function CustomerModal({
@@ -39,11 +39,10 @@ export default function CustomerModal({
   const [newCustomer, setNewCustomer] = useState({
     name: '',
     identification: '',
-    identificationType: 'CC',
+    identificationType: 'CC' as 'CC' | 'NIT' | 'CE' | 'PASAPORTE',
     phone: '',
     email: '',
     address: '',
-    city: '',
   });
   const [isCreating, setIsCreating] = useState(false);
 
@@ -55,18 +54,16 @@ export default function CustomerModal({
 
     setIsSearching(true);
     setFoundCustomer(null);
-    
+
     try {
       console.log('Buscando cliente por DNI/NIT:', searchCode);
-      
+
       // Buscar SOLO por identificación exacta (DNI/NIT/CC)
       const allCustomers = await posService.getCustomers();
       console.log('Total clientes obtenidos:', allCustomers.length);
-      
+
       const exactMatch = allCustomers.find(
-        (c: Customer) => 
-          c.identification === searchCode.trim() || 
-          c.nit === searchCode.trim()
+        (c: Customer) => c.ident === searchCode.trim()
       );
 
       if (exactMatch) {
@@ -89,7 +86,7 @@ export default function CustomerModal({
     console.log('handleSelectFound llamado, foundCustomer:', foundCustomer);
     if (foundCustomer && foundCustomer.name && foundCustomer.id) {
       console.log('Seleccionando cliente:', foundCustomer.name, foundCustomer.id);
-      onSelectCustomer(foundCustomer.name, foundCustomer.id);
+      onSelectCustomer(foundCustomer.name, foundCustomer.id, !!foundCustomer.requires_electronic_invoice);
       setFoundCustomer(null);
       setSearchCode('');
       onClose();
@@ -110,16 +107,15 @@ export default function CustomerModal({
       console.log('Creando cliente:', newCustomer);
       const created = await posService.createCustomer({
         name: newCustomer.name,
-        identification: newCustomer.identification,
-        identification_type: newCustomer.identificationType as 'CC' | 'NIT' | 'CE' | 'TI',
+        ident: newCustomer.identification,
+        ident_type: newCustomer.identificationType,
         phone: newCustomer.phone,
         email: newCustomer.email,
         address: newCustomer.address,
-        city: newCustomer.city,
       });
-      
+
       console.log('Cliente creado:', created);
-      
+
       Alert.alert('Éxito', 'Cliente creado exitosamente', [
         {
           text: 'OK',
@@ -132,7 +128,6 @@ export default function CustomerModal({
               phone: '',
               email: '',
               address: '',
-              city: '',
             });
             onClose();
           },
@@ -223,7 +218,7 @@ export default function CustomerModal({
                     <View style={styles.infoRow}>
                       <Ionicons name="card-outline" size={16} color={Colors.textLight} />
                       <Text style={styles.foundInfo}>
-                        {foundCustomer.identification || foundCustomer.nit}
+                        {foundCustomer.ident_type}: {foundCustomer.ident}
                       </Text>
                     </View>
                     
@@ -247,9 +242,15 @@ export default function CustomerModal({
                         <Text style={styles.foundInfo}>{foundCustomer.address}</Text>
                       </View>
                     )}
+
+                    <View style={[styles.invoiceBadge, foundCustomer.requires_electronic_invoice ? styles.invoiceBadgeElectronic : styles.invoiceBadgePos]}>
+                      <Text style={[styles.invoiceBadgeText, foundCustomer.requires_electronic_invoice ? styles.invoiceBadgeTextElectronic : styles.invoiceBadgeTextPos]}>
+                        {foundCustomer.requires_electronic_invoice ? '📄 Requiere Factura Electrónica DIAN' : '🧾 Factura POS Estándar'}
+                      </Text>
+                    </View>
                   </View>
-                  
-                  <TouchableOpacity 
+
+                  <TouchableOpacity
                     style={styles.selectButton}
                     onPress={handleSelectFound}
                     activeOpacity={0.7}
@@ -277,7 +278,7 @@ export default function CustomerModal({
                 Tipo de Identificación <Text style={styles.required}>*</Text>
               </Text>
               <View style={styles.idTypeRow}>
-                {['CC', 'NIT', 'CE', 'TI'].map((type) => (
+                {(['CC', 'NIT', 'CE', 'PASAPORTE'] as const).map((type) => (
                   <TouchableOpacity
                     key={type}
                     style={[
@@ -341,16 +342,7 @@ export default function CustomerModal({
                 onChangeText={(text) => setNewCustomer({ ...newCustomer, address: text })}
               />
 
-              <Text style={styles.label}>Ciudad</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Ej: Bogotá"
-                placeholderTextColor={Colors.textLight}
-                value={newCustomer.city}
-                onChangeText={(text) => setNewCustomer({ ...newCustomer, city: text })}
-              />
-
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.createButton, isCreating && styles.createButtonDisabled]}
                 onPress={handleCreateCustomer}
                 disabled={isCreating}
@@ -474,8 +466,19 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   input: {
+    backgroundColor: Colors.white,
     borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: BorderRadius.md,
     paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    fontSize: FontSize.md,
+    color: Colors.text,
+  },
+  searchButton: {
+    width: 48,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -534,20 +537,33 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
     marginTop: Spacing.sm
   },
-  foundInfo: {
-    fontSize: FontSize.sm,
-    color: Colors.textLight,
-  },
-  selectButton: {
-    backgroundColor: Colors.primary,
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    alignItems: 'center',
-  },
   selectButtonText: {
     fontSize: FontSize.md,
     fontWeight: FontWeight.semibold,
     color: Colors.white,
+  },
+  invoiceBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.full,
+    marginTop: Spacing.xs,
+  },
+  invoiceBadgeElectronic: {
+    backgroundColor: '#DBEAFE',
+  },
+  invoiceBadgePos: {
+    backgroundColor: '#F3F4F6',
+  },
+  invoiceBadgeText: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.semibold,
+  },
+  invoiceBadgeTextElectronic: {
+    color: '#1D4ED8',
+  },
+  invoiceBadgeTextPos: {
+    color: '#4B5563',
   },
   hint: {
     flexDirection: 'row',

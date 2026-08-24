@@ -12,6 +12,7 @@ export const ENDPOINTS = {
   AUTH: {
     LOGIN: '/api/user/login',
     LOGOUT: '/api/user/logout',
+    REFRESH: '/api/user/refresh',
   },
 
   // POS
@@ -25,6 +26,7 @@ export const ENDPOINTS = {
     ORDER_DETAIL: (id: number) => `/api/pos/orders/${id}`,
     ORDER_PAUSE: '/api/pos/orders/pause',
     ORDER_DELETE: (id: number) => `/api/pos/orders/${id}`,
+    PRODUCT_SCAN: (code: string) => `/api/pos/products/scan?code=${encodeURIComponent(code)}`,
     SHIFTS: {
       ACTIVE: '/api/pos/shifts/active',
       OPEN: '/api/pos/shifts/open',
@@ -45,6 +47,7 @@ export const ENDPOINTS = {
     UPDATE: (id: number) => `/api/products/${id}`,
     DELETE: (id: number) => `/api/products/${id}`,
     IMAGE: (id: number) => `/api/products/${id}/image`,
+    MEASUREMENT_UNITS: '/api/products/measurement-units',
   },
 
   // Inventory
@@ -56,6 +59,7 @@ export const ENDPOINTS = {
     PRODUCT_STOCK: (id: number) => `/api/inventory/product/${id}/stock`,
     WAREHOUSE_STOCK: (id: number) => `/api/inventory/warehouse/${id}/stock`,
     PRODUCT_MOVEMENTS: (id: number) => `/api/inventory/product/${id}/movements`,
+    WAREHOUSE_MOVEMENTS: (id: number) => `/api/inventory/warehouse/${id}/movements`,
   },
 
   // Customers
@@ -120,6 +124,13 @@ export const ENDPOINTS = {
     CREATE: '/api/purchases',
     UPDATE: (id: number) => `/api/purchases/${id}`,
     DELETE: (id: number) => `/api/purchases/${id}`,
+    UPDATE_STATUS: (id: number) => `/api/purchases/${id}/status`,
+  },
+
+  // Suppliers
+  SUPPLIERS: {
+    LIST: '/api/suppliers',
+    DETAIL: (id: number) => `/api/suppliers/${id}`,
   },
 
   // Reports
@@ -132,6 +143,8 @@ export const ENDPOINTS = {
     TAXES: '/api/reports/taxes',
     TOP_PRODUCTS: '/api/reports/top-products',
     REVENUE: '/api/reports/revenue',
+    BY_TYPE: (reportType: string) => `/api/reports/${reportType}`,
+    EXPORT: (reportType: string) => `/api/reports/${reportType}/export`,
   },
 
   // Profile
@@ -145,6 +158,42 @@ export const ENDPOINTS = {
   COMPANY: {
     INFO: '/api/company',
     UPDATE: '/api/company',
+    PLAN_USAGE: '/api/company/plan/usage',
+    API_CONFIG: '/api/company/api-config',
+    MATIAS_CONFIG: '/api/company/matias-config',
+    MATIAS_CONFIG_TEST: '/api/company/matias-config/test',
+  },
+
+  // Invoicing resolutions (facturación electrónica DIAN)
+  INVOICING_RESOLUTIONS: {
+    LIST: '/api/invoicing-resolutions',
+    CREATE: '/api/invoicing-resolutions',
+    UPDATE: (id: number) => `/api/invoicing-resolutions/${id}`,
+    DELETE: (id: number) => `/api/invoicing-resolutions/${id}`,
+    TOGGLE: (id: number) => `/api/invoicing-resolutions/${id}/toggle`,
+  },
+
+  // DIAN (facturación electrónica)
+  DIAN: {
+    STATUS: (saleId: number) => `/api/dian/status/${saleId}`,
+    RETRY: (saleId: number) => `/api/dian/retry/${saleId}`,
+  },
+
+  // Municipalities
+  MUNICIPALITIES: {
+    SEARCH: (query: string) => `/api/municipalities?q=${encodeURIComponent(query)}`,
+  },
+
+  // Import / Export (Excel)
+  IMPORT_EXPORT: {
+    TEMPLATE: (entity: string) => `/api/import-export/template/${entity}`,
+    IMPORT: (entity: string) => `/api/import-export/import/${entity}`,
+    EXPORT: (entity: string) => `/api/import-export/export/${entity}`,
+  },
+
+  // AI Assistant
+  AI: {
+    QUERY: '/api/ai/query',
   },
 
   // Roles
@@ -154,11 +203,18 @@ export const ENDPOINTS = {
     CREATE: '/api/roles',
     UPDATE: (id: number) => `/api/roles/${id}`,
     DELETE: (id: number) => `/api/roles/${id}`,
+    PERMISSIONS: (id: number) => `/api/roles/${id}/permissions`,
   },
 
   // Permissions
   PERMISSIONS: {
     LIST: '/api/permissions',
+    ME: '/api/users/me/permissions',
+  },
+
+  // Subscription
+  SUBSCRIPTION: {
+    STATUS: '/api/subscription/status',
   },
 
   // Users
@@ -175,9 +231,11 @@ export const ENDPOINTS = {
   INTEGRATIONS: {
     LIST: '/api/integrations',
     DETAIL: (id: number) => `/api/integrations/${id}`,
+    BY_SLUG: (slug: string) => `/api/integrations/slug/${slug}`,
     CREATE: '/api/integrations',
     UPDATE: (id: number) => `/api/integrations/${id}`,
     DELETE: (id: number) => `/api/integrations/${id}`,
+    TOGGLE: (id: number) => `/api/integrations/${id}/toggle`,
     TEST: (id: number) => `/api/integrations/${id}/test`,
     LOGS: (id: number) => `/api/integrations/${id}/logs`,
     STATS: (id: number) => `/api/integrations/${id}/stats`,

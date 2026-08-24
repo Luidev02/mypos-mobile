@@ -1,18 +1,21 @@
+import { CategoryImage } from '@/components/CategoryImage';
 import { ErrorState } from '@/components/ErrorState';
 import { LoadingState } from '@/components/LoadingState';
+import { ProductImage } from '@/components/ProductImage';
 import { BorderRadius, Colors, FontSize, FontWeight, Shadow, Spacing } from '@/constants/theme';
-import { categoryService } from '@/services';
-import type { CategoryDetailed } from '@/types';
+import { categoryService, posService } from '@/services';
+import type { CategoryDetailed, Product } from '@/types';
+import { formatCurrency } from '@/utils/helpers';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { CategoryImage } from '@/components/CategoryImage';
 
 export default function CategoryDetailScreen() {
   const { id } = useLocalSearchParams();
   const [category, setCategory] = useState<CategoryDetailed | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,18 +27,13 @@ export default function CategoryDetailScreen() {
     try {
       setIsLoading(true);
       setError(null);
-      const data = await categoryService.getCategory(Number(id));
-      console.log('=== CATEGORIA CARGADA ===');
-      console.log('Data completa:', JSON.stringify(data, null, 2));
-      console.log('ID:', data.id);
-      console.log('Nombre:', data.name);
-      console.log('Company ID:', data.company_id);
-      console.log('Image:', data.image);
-      console.log('Creation Date:', data.creation_date);
-      console.log('Updated At:', data.updated_at);
+      const [data, categoryProducts] = await Promise.all([
+        categoryService.getCategory(Number(id)),
+        posService.getCategoryProducts(Number(id)),
+      ]);
       setCategory(data);
+      setProducts(categoryProducts);
     } catch (error: any) {
-      console.error('Error cargando categoría:', error);
       setError(error.message || 'Error al cargar categoría');
     } finally {
       setIsLoading(false);
@@ -82,12 +80,12 @@ export default function CategoryDetailScreen() {
           <Ionicons name="arrow-back" size={24} color={Colors.white} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Detalle de Categoría</Text>
-        <TouchableOpacity onPress={() => router.push(`/categories/edit/${id}` as any)}>
+        <TouchableOpacity onPress={() => router.push({ pathname: '/categories/new', params: { id } })}>
           <Ionicons name="create-outline" size={24} color={Colors.white} />
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView style={styles.scrollBody} contentContainerStyle={styles.content}>
         {category.id && (
           <CategoryImage 
             categoryId={category.id} 
@@ -107,20 +105,6 @@ export default function CategoryDetailScreen() {
           <Text style={styles.value}>{category.name}</Text>
         </View>
 
-        {category.company_id && (
-          <View style={styles.infoCard}>
-            <Text style={styles.label}>ID de Empresa</Text>
-            <Text style={styles.value}>{category.company_id}</Text>
-          </View>
-        )}
-
-        {category.image && (
-          <View style={styles.infoCard}>
-            <Text style={styles.label}>Ruta de Imagen</Text>
-            <Text style={styles.value} numberOfLines={3}>{category.image}</Text>
-          </View>
-        )}
-
         {category.creation_date && (
           <View style={styles.infoCard}>
             <Text style={styles.label}>Fecha de Creación</Text>
@@ -139,6 +123,33 @@ export default function CategoryDetailScreen() {
           </View>
         )}
 
+        <View style={styles.productsSection}>
+          <Text style={styles.sectionTitle}>Productos en esta categoría ({products.length})</Text>
+          {products.length === 0 ? (
+            <Text style={styles.emptyText}>Esta categoría no tiene productos todavía.</Text>
+          ) : (
+            products.map((product) => (
+              <TouchableOpacity
+                key={product.id}
+                style={styles.productRow}
+                onPress={() => router.push(`/products` as any)}
+              >
+                <ProductImage
+                  productId={product.id}
+                  style={styles.productImage}
+                  placeholderColor={Colors.textSecondary}
+                  placeholderSize={18}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.productName} numberOfLines={1}>{product.name}</Text>
+                  <Text style={styles.productSku}>SKU: {product.sku}</Text>
+                </View>
+                <Text style={styles.productPrice}>{formatCurrency(product.price)}</Text>
+              </TouchableOpacity>
+            ))
+          )}
+        </View>
+
         <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
           <Ionicons name="trash-outline" size={20} color={Colors.white} />
           <Text style={styles.deleteButtonText}>Eliminar Categoría</Text>
@@ -151,7 +162,7 @@ export default function CategoryDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.primary,
   },
   header: {
     flexDirection: 'row',
@@ -165,6 +176,10 @@ const styles = StyleSheet.create({
     fontSize: FontSize.lg,
     fontWeight: FontWeight.bold,
     color: Colors.white,
+  },
+  scrollBody: {
+    flex: 1,
+    backgroundColor: Colors.background,
   },
   content: {
     padding: Spacing.md,
@@ -191,6 +206,49 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md,
     fontWeight: FontWeight.medium,
     color: Colors.text,
+  },
+  productsSection: {
+    backgroundColor: Colors.white,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    ...Shadow.sm,
+  },
+  sectionTitle: {
+    fontSize: FontSize.md,
+    fontWeight: FontWeight.bold,
+    color: Colors.text,
+    marginBottom: Spacing.sm,
+  },
+  emptyText: {
+    fontSize: FontSize.sm,
+    color: Colors.textLight,
+  },
+  productRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  productImage: {
+    width: 36,
+    height: 36,
+    borderRadius: BorderRadius.sm,
+  },
+  productName: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
+    color: Colors.text,
+  },
+  productSku: {
+    fontSize: FontSize.xs,
+    color: Colors.textLight,
+  },
+  productPrice: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.bold,
+    color: Colors.primary,
   },
   deleteButton: {
     flexDirection: 'row',

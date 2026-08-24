@@ -1,15 +1,20 @@
+import { ErrorState } from '@/components/ErrorState';
+import { MunicipalityAutocomplete } from '@/components/MunicipalityAutocomplete';
 import { BorderRadius, Colors, FontSize, FontWeight, Spacing } from '@/constants/theme';
+import { useToast } from '@/contexts/ToastContext';
 import { posService } from '@/services';
-import type { Customer } from '@/types';
+import type { Customer, CustomerIdentType, Municipality } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
     FlatList,
     Modal,
     ScrollView,
+    Switch,
     StyleSheet,
     Text,
     TextInput,
@@ -18,73 +23,79 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+const ID_TYPES: { value: CustomerIdentType; label: string }[] = [
+  { value: 'CC', label: 'CC' },
+  { value: 'NIT', label: 'NIT' },
+  { value: 'CE', label: 'CE' },
+  { value: 'PASAPORTE', label: 'Pasaporte' },
+];
+
+const emptyForm = () => ({
+  name: '',
+  identification: '',
+  identificationType: 'CC' as CustomerIdentType,
+  dv: '',
+  phone: '',
+  email: '',
+  address: '',
+  municipalityId: undefined as number | undefined,
+  municipalityLabel: '',
+  requiresElectronicInvoice: false,
+  isActive: true,
+});
+
 export default function CustomersScreen() {
+  const toast = useToast();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [filteredCustomers, setFilteredCustomers] = useState<Customer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
-  const [formData, setFormData] = useState({
-    name: '',
-    identification: '',
-    identificationType: 'CC' as 'CC' | 'NIT' | 'CE' | 'TI',
-    phone: '',
-    email: '',
-    address: '',
-    city: '',
-  });
+  const [formData, setFormData] = useState(emptyForm());
 
-  useEffect(() => {
-    loadCustomers();
-  }, []);
-
-  useEffect(() => {
-    filterCustomers();
-  }, [searchQuery, customers]);
-
-  const loadCustomers = async () => {
+  const loadCustomers = useCallback(async () => {
     try {
       setIsLoading(true);
+      setError(null);
       const data = await posService.getCustomers();
       setCustomers(data);
-      setFilteredCustomers(data);
-    } catch (error) {
-      console.error('Error loading customers:', error);
-      Alert.alert('Error', 'No se pudieron cargar los clientes');
+    } catch (err: any) {
+      console.error('Error loading customers:', err);
+      setError(err.response?.data?.message || 'No se pudieron cargar los clientes');
+      toast.error('No se pudieron cargar los clientes');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const filterCustomers = () => {
+  useFocusEffect(
+    useCallback(() => {
+      loadCustomers();
+    }, [loadCustomers])
+  );
+
+  useEffect(() => {
     if (!searchQuery.trim()) {
       setFilteredCustomers(customers);
       return;
     }
-
     const query = searchQuery.toLowerCase();
-    const filtered = customers.filter(
-      (customer) =>
-        customer.name?.toLowerCase().includes(query) ||
-        customer.ident?.toLowerCase().includes(query) ||
-        customer.phone?.toLowerCase().includes(query) ||
-        customer.email?.toLowerCase().includes(query)
+    setFilteredCustomers(
+      customers.filter(
+        (customer) =>
+          customer.name?.toLowerCase().includes(query) ||
+          (customer.ident || '').includes(query) ||
+          (customer.email || '').toLowerCase().includes(query)
+      )
     );
-    setFilteredCustomers(filtered);
-  };
+  }, [searchQuery, customers]);
 
   const handleAddNew = () => {
     setEditingCustomer(null);
-    setFormData({
-      name: '',
-      identification: '',
-      identificationType: 'CC',
-      phone: '',
-      email: '',
-      address: '',
-      city: '',
-    });
+    setFormData(emptyForm());
     setModalVisible(true);
   };
 
@@ -94,51 +105,59 @@ export default function CustomersScreen() {
       name: customer.name || '',
       identification: customer.ident || '',
       identificationType: customer.ident_type || 'CC',
+      dv: customer.dv || '',
       phone: customer.phone || '',
       email: customer.email || '',
       address: customer.address || '',
-      city: customer.city || '',
+      municipalityId: customer.municipality_id,
+      municipalityLabel: customer.municipality_id && customer.municipality_name
+        ? `${customer.municipality_name}${customer.municipality_department ? ` — ${customer.municipality_department}` : ''}`
+        : '',
+      requiresElectronicInvoice: !!customer.requires_electronic_invoice,
+      isActive: customer.status !== 'disable',
     });
     setModalVisible(true);
   };
 
+  const handleSelectMunicipality = (m: Municipality) => {
+    setFormData((prev) => ({ ...prev, municipalityId: m.id }));
+  };
+
   const handleSave = async () => {
     if (!formData.name.trim() || !formData.identification.trim()) {
-      Alert.alert('Error', 'Nombre y DNI/NIT son obligatorios');
+      toast.error('Nombre y DNI/NIT son obligatorios');
       return;
     }
 
+    const payload = {
+      name: formData.name.trim(),
+      ident: formData.identification.trim(),
+      ident_type: formData.identificationType,
+      dv: formData.identificationType === 'NIT' ? formData.dv.trim() || undefined : undefined,
+      phone: formData.phone.trim() || undefined,
+      email: formData.email.trim() || undefined,
+      address: formData.address.trim() || undefined,
+      municipality_id: formData.municipalityId ?? null,
+      requires_electronic_invoice: formData.requiresElectronicInvoice,
+      status: (formData.isActive ? 'active' : 'disable') as 'active' | 'disable',
+    };
+
     try {
+      setIsSaving(true);
       if (editingCustomer) {
-        // Actualizar cliente existente
-        await posService.updateCustomer(editingCustomer.id, {
-          name: formData.name,
-          ident: formData.identification,
-          ident_type: formData.identificationType,
-          phone: formData.phone,
-          email: formData.email,
-          address: formData.address,
-          city: formData.city,
-        });
-        Alert.alert('Éxito', 'Cliente actualizado correctamente');
+        await posService.updateCustomer(editingCustomer.id, payload);
+        toast.success('Cliente actualizado correctamente');
       } else {
-        // Crear nuevo cliente
-        await posService.createCustomer({
-          name: formData.name,
-          ident: formData.identification,
-          ident_type: formData.identificationType,
-          phone: formData.phone,
-          email: formData.email,
-          address: formData.address,
-          city: formData.city,
-        });
-        Alert.alert('Éxito', 'Cliente creado correctamente');
+        await posService.createCustomer(payload);
+        toast.success('Cliente creado correctamente');
       }
       setModalVisible(false);
       loadCustomers();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving customer:', error);
-      Alert.alert('Error', 'No se pudo guardar el cliente');
+      toast.error(error.response?.data?.message || 'No se pudo guardar el cliente');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -154,11 +173,11 @@ export default function CustomersScreen() {
           onPress: async () => {
             try {
               await posService.deleteCustomer(customer.id);
-              Alert.alert('Éxito', 'Cliente eliminado correctamente');
+              toast.success('Cliente eliminado correctamente');
               loadCustomers();
             } catch (error) {
               console.error('Error deleting customer:', error);
-              Alert.alert('Error', 'No se pudo eliminar el cliente');
+              toast.error('No se pudo eliminar. Puede tener ventas asociadas.');
             }
           },
         },
@@ -179,7 +198,7 @@ export default function CustomersScreen() {
         <View style={styles.cardInfo}>
           <Text style={styles.cardName}>{item.name}</Text>
           <Text style={styles.cardDetail}>
-            {item.ident_type || 'DNI'}: {item.ident}
+            {item.ident_type || 'CC'}: {item.ident}
           </Text>
         </View>
         <View style={styles.cardActions}>
@@ -205,7 +224,24 @@ export default function CustomersScreen() {
           </TouchableOpacity>
         </View>
       </View>
-      
+
+      <View style={styles.cardMetaRow}>
+        {item.requires_electronic_invoice ? (
+          <View style={[styles.badge, styles.badgeElectronic]}>
+            <Text style={[styles.badgeText, styles.badgeTextElectronic]}>Electrónica</Text>
+          </View>
+        ) : (
+          <View style={[styles.badge, styles.badgePos]}>
+            <Text style={[styles.badgeText, styles.badgeTextPos]}>POS</Text>
+          </View>
+        )}
+        <View style={[styles.badge, item.status === 'active' ? styles.badgeActive : styles.badgeInactive]}>
+          <Text style={[styles.badgeText, item.status === 'active' ? styles.badgeTextActive : styles.badgeTextInactive]}>
+            {item.status === 'active' ? 'Activo' : 'Inactivo'}
+          </Text>
+        </View>
+      </View>
+
       {(item.phone || item.email || item.address) && (
         <View style={styles.cardDetails}>
           {item.phone && (
@@ -228,8 +264,7 @@ export default function CustomersScreen() {
           )}
         </View>
       )}
-      
-      {/* Indicador visual de que es clickeable */}
+
       <View style={styles.cardFooter}>
         <Text style={styles.viewDetailsText}>Ver detalles</Text>
         <Ionicons name="chevron-forward" size={16} color={Colors.primary} />
@@ -257,7 +292,7 @@ export default function CustomersScreen() {
         <Ionicons name="search" size={20} color={Colors.textLight} style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Buscar por nombre, DNI, teléfono..."
+          placeholder="Buscar por nombre, identificación o email..."
           placeholderTextColor={Colors.textLight}
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -274,6 +309,8 @@ export default function CustomersScreen() {
           <ActivityIndicator size="large" color={Colors.primary} />
           <Text style={styles.loadingText}>Cargando clientes...</Text>
         </View>
+      ) : error ? (
+        <ErrorState message={error} onRetry={loadCustomers} />
       ) : filteredCustomers.length === 0 ? (
         <View style={styles.centerContainer}>
           <Ionicons name="people-outline" size={64} color={Colors.textLight} />
@@ -291,6 +328,7 @@ export default function CustomersScreen() {
           data={filteredCustomers}
           renderItem={renderCustomerCard}
           keyExtractor={(item) => item.id.toString()}
+          style={styles.listBody}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
         />
@@ -309,70 +347,77 @@ export default function CustomersScreen() {
             <View style={{ width: 28 }} />
           </View>
 
-          <ScrollView style={styles.modalContent}>
+          <ScrollView style={styles.modalContent} keyboardShouldPersistTaps="handled">
+            <Text style={styles.sectionTitle}>Información Principal</Text>
+
             <Text style={styles.label}>
-              Nombre Completo <Text style={styles.required}>*</Text>
+              Nombre Completo / Razón Social <Text style={styles.required}>*</Text>
             </Text>
             <TextInput
               style={styles.input}
-              placeholder="Ej: Juan Pérez"
+              placeholder="Ej: Juan Pérez o Empresa SAS"
               placeholderTextColor={Colors.textLight}
               value={formData.name}
               onChangeText={(text) => setFormData({ ...formData, name: text })}
             />
 
-            <Text style={styles.label}>
-              Tipo de Identificación <Text style={styles.required}>*</Text>
-            </Text>
+            <Text style={styles.label}>Tipo de Identificación</Text>
             <View style={styles.idTypeRow}>
-              {(['CC', 'NIT', 'CE', 'TI'] as const).map((type) => (
+              {ID_TYPES.map(({ value, label }) => (
                 <TouchableOpacity
-                  key={type}
+                  key={value}
                   style={[
                     styles.idTypeButton,
-                    formData.identificationType === type && styles.idTypeButtonActive,
+                    formData.identificationType === value && styles.idTypeButtonActive,
                   ]}
-                  onPress={() => setFormData({ ...formData, identificationType: type })}
+                  onPress={() => setFormData({ ...formData, identificationType: value })}
                   activeOpacity={0.7}
                 >
                   <Text
                     style={[
                       styles.idTypeText,
-                      formData.identificationType === type && styles.idTypeTextActive,
+                      formData.identificationType === value && styles.idTypeTextActive,
                     ]}
                   >
-                    {type}
+                    {label}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
 
             <Text style={styles.label}>
-              DNI/NIT <Text style={styles.required}>*</Text>
+              Número de Identificación <Text style={styles.required}>*</Text>
             </Text>
             <TextInput
               style={styles.input}
-              placeholder="Número de identificación"
+              placeholder="Ej: 123456789"
               placeholderTextColor={Colors.textLight}
               value={formData.identification}
               onChangeText={(text) => setFormData({ ...formData, identification: text })}
               keyboardType="numeric"
             />
 
-            <Text style={styles.label}>Teléfono</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Ej: 3001234567"
-              placeholderTextColor={Colors.textLight}
-              value={formData.phone}
-              onChangeText={(text) => setFormData({ ...formData, phone: text })}
-              keyboardType="phone-pad"
-            />
+            {formData.identificationType === 'NIT' && (
+              <>
+                <Text style={styles.label}>Dígito de Verificación (DV)</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Ej: 7"
+                  placeholderTextColor={Colors.textLight}
+                  value={formData.dv}
+                  onChangeText={(text) => setFormData({ ...formData, dv: text.slice(0, 1) })}
+                  keyboardType="numeric"
+                  maxLength={1}
+                />
+              </>
+            )}
 
-            <Text style={styles.label}>Email</Text>
+            <Text style={styles.sectionTitle}>Contacto y Ubicación</Text>
+
+            <Text style={styles.label}>Correo Electrónico</Text>
             <TextInput
               style={styles.input}
-              placeholder="correo@ejemplo.com"
+              placeholder="cliente@ejemplo.com"
               placeholderTextColor={Colors.textLight}
               value={formData.email}
               onChangeText={(text) => setFormData({ ...formData, email: text })}
@@ -380,29 +425,72 @@ export default function CustomersScreen() {
               autoCapitalize="none"
             />
 
-            <Text style={styles.label}>Dirección</Text>
+            <Text style={styles.label}>Teléfono / Celular</Text>
             <TextInput
               style={styles.input}
-              placeholder="Calle 123 #45-67"
+              placeholder="+57 300 123 4567"
+              placeholderTextColor={Colors.textLight}
+              value={formData.phone}
+              onChangeText={(text) => setFormData({ ...formData, phone: text })}
+              keyboardType="phone-pad"
+            />
+
+            <Text style={styles.label}>Dirección Física</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Calle 123 # 45-67"
               placeholderTextColor={Colors.textLight}
               value={formData.address}
               onChangeText={(text) => setFormData({ ...formData, address: text })}
             />
 
-            <Text style={styles.label}>Ciudad</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Ej: Bogotá"
-              placeholderTextColor={Colors.textLight}
-              value={formData.city}
-              onChangeText={(text) => setFormData({ ...formData, city: text })}
+            <Text style={styles.label}>Municipio / Ciudad</Text>
+            <MunicipalityAutocomplete
+              initialLabel={formData.municipalityLabel}
+              hasSelection={!!formData.municipalityId}
+              onSelect={handleSelectMunicipality}
+              onClear={() => setFormData((prev) => ({ ...prev, municipalityId: undefined }))}
             />
 
-            <TouchableOpacity style={styles.saveButton} onPress={handleSave} activeOpacity={0.7}>
-              <Ionicons name="checkmark-circle" size={20} color={Colors.white} />
-              <Text style={styles.saveButtonText}>
-                {editingCustomer ? 'Actualizar' : 'Crear'} Cliente
-              </Text>
+            <Text style={styles.sectionTitle}>Facturación Electrónica DIAN</Text>
+            <View style={styles.switchCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.switchLabel}>Este cliente requiere factura electrónica DIAN</Text>
+                <Text style={styles.switchHint}>
+                  ⚠️ Solo aplica si la empresa está configurada para reportar a la DIAN.
+                </Text>
+              </View>
+              <Switch
+                value={formData.requiresElectronicInvoice}
+                onValueChange={(value) => setFormData({ ...formData, requiresElectronicInvoice: value })}
+                trackColor={{ true: Colors.primary }}
+              />
+            </View>
+
+            <Text style={styles.sectionTitle}>Estado</Text>
+            <View style={styles.switchCard}>
+              <Text style={styles.switchLabel}>Cliente Activo</Text>
+              <Switch
+                value={formData.isActive}
+                onValueChange={(value) => setFormData({ ...formData, isActive: value })}
+                trackColor={{ true: Colors.primary }}
+              />
+            </View>
+
+            <TouchableOpacity
+              style={[styles.saveButton, isSaving && { opacity: 0.6 }]}
+              onPress={handleSave}
+              activeOpacity={0.7}
+              disabled={isSaving}
+            >
+              {isSaving ? (
+                <ActivityIndicator size="small" color={Colors.white} />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle" size={20} color={Colors.white} />
+                  <Text style={styles.saveButtonText}>Guardar Cliente</Text>
+                </>
+              )}
             </TouchableOpacity>
           </ScrollView>
         </View>
@@ -414,7 +502,7 @@ export default function CustomersScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.primary,
   },
   header: {
     flexDirection: 'row',
@@ -487,6 +575,10 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md,
     fontWeight: FontWeight.semibold,
   },
+  listBody: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
   listContainer: {
     padding: Spacing.md,
   },
@@ -535,9 +627,47 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: BorderRadius.md,
-    backgroundColor: Colors.backgroundLight,
+    backgroundColor: Colors.background,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  cardMetaRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+  },
+  badge: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.full,
+  },
+  badgeElectronic: {
+    backgroundColor: '#DBEAFE',
+  },
+  badgePos: {
+    backgroundColor: '#F3F4F6',
+  },
+  badgeActive: {
+    backgroundColor: '#DCFCE7',
+  },
+  badgeInactive: {
+    backgroundColor: '#FEE2E2',
+  },
+  badgeText: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.semibold,
+  },
+  badgeTextElectronic: {
+    color: '#1D4ED8',
+  },
+  badgeTextPos: {
+    color: '#4B5563',
+  },
+  badgeTextActive: {
+    color: '#166534',
+  },
+  badgeTextInactive: {
+    color: '#991B1B',
   },
   cardDetails: {
     marginTop: Spacing.md,
@@ -596,6 +726,16 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: Spacing.lg,
   },
+  sectionTitle: {
+    fontSize: FontSize.md,
+    fontWeight: FontWeight.bold,
+    color: Colors.text,
+    marginTop: Spacing.lg,
+    marginBottom: Spacing.sm,
+    paddingBottom: Spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
   label: {
     fontSize: FontSize.md,
     fontWeight: FontWeight.semibold,
@@ -633,19 +773,40 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary,
   },
   idTypeText: {
-    fontSize: FontSize.md,
+    fontSize: FontSize.sm,
     fontWeight: FontWeight.semibold,
     color: Colors.text,
   },
   idTypeTextActive: {
     color: Colors.white,
   },
+  switchCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    gap: Spacing.md,
+  },
+  switchLabel: {
+    fontSize: FontSize.md,
+    fontWeight: FontWeight.medium,
+    color: Colors.text,
+  },
+  switchHint: {
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+    marginTop: Spacing.xs,
+  },
   saveButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing.sm,
-    backgroundColor: Colors.success,
+    backgroundColor: '#3B82F6',
     borderRadius: BorderRadius.md,
     padding: Spacing.lg,
     marginTop: Spacing.xl,

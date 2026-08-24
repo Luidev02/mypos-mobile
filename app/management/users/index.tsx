@@ -4,18 +4,21 @@ import { ErrorState } from '@/components/ErrorState';
 import { LoadingState } from '@/components/LoadingState';
 import { SearchBar } from '@/components/SearchBar';
 import { BorderRadius, Colors, FontSize, FontWeight, Shadow, Spacing } from '@/constants/theme';
-import { extendedUserService } from '@/services/extended';
-import type { UserManagement } from '@/types';
+import { useToast } from '@/contexts/ToastContext';
+import { extendedUserService, warehouseService } from '@/services/extended';
+import type { Role, UserManagement, Warehouse } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useState } from 'react';
 import {
-  Alert,
+  ActivityIndicator,
   FlatList,
   Modal,
   RefreshControl,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -24,12 +27,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function UsersScreen() {
+  const toast = useToast();
   const [users, setUsers] = useState<UserManagement[]>([]);
-  const [filteredUsers, setFilteredUsers] = useState<UserManagement[]>([]);
-  const [roles, setRoles] = useState<any[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserManagement | null>(null);
@@ -42,56 +47,51 @@ export default function UsersScreen() {
     email: '',
     password: '',
     role_id: '',
+    warehouse_id: '',
     pin_code: '',
-    is_active: true,
+    isActive: true,
   });
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  useEffect(() => {
-    filterUsers();
-  }, [searchQuery, users]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
-      const [usersData, rolesData] = await Promise.all([
+      const [usersData, rolesData, warehousesData] = await Promise.all([
         extendedUserService.getUsers(),
         extendedUserService.getRoles(),
+        warehouseService.getWarehouses(),
       ]);
       setUsers(usersData);
       setRoles(rolesData);
-    } catch (error: any) {
-      setError(error.message || 'Error al cargar usuarios');
+      setWarehouses(warehousesData);
+    } catch (e: any) {
+      setError(e.message || 'Error al cargar usuarios');
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  };
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await loadData();
   };
 
-  const filterUsers = () => {
-    if (!searchQuery.trim()) {
-      setFilteredUsers(users);
-      return;
-    }
-
+  const filteredUsers = users.filter((user) => {
+    if (!searchQuery.trim()) return true;
     const query = searchQuery.toLowerCase();
-    const filtered = users.filter(
-      (user) =>
-        user.username.toLowerCase().includes(query) ||
-        user.email.toLowerCase().includes(query) ||
-        user.role_name?.toLowerCase().includes(query)
+    return (
+      user.username.toLowerCase().includes(query) ||
+      user.email.toLowerCase().includes(query) ||
+      user.role_name?.toLowerCase().includes(query)
     );
-    setFilteredUsers(filtered);
-  };
+  });
 
   const handleOpenModal = (user?: UserManagement) => {
     if (user) {
@@ -101,8 +101,9 @@ export default function UsersScreen() {
         email: user.email,
         password: '',
         role_id: user.role_id.toString(),
+        warehouse_id: user.warehouse_id ? String(user.warehouse_id) : '',
         pin_code: user.pin_code || '',
-        is_active: user.is_active,
+        isActive: user.status !== 'inactive',
       });
     } else {
       setSelectedUser(null);
@@ -111,42 +112,55 @@ export default function UsersScreen() {
         email: '',
         password: '',
         role_id: '',
+        warehouse_id: warehouses.length > 0 ? String(warehouses[0].id) : '',
         pin_code: '',
-        is_active: true,
+        isActive: true,
       });
     }
     setShowModal(true);
   };
 
   const handleSave = async () => {
-    if (!formData.username || !formData.email || !formData.role_id) {
-      Alert.alert('Error', 'Complete los campos requeridos');
+    if (!formData.username || !formData.email || !formData.role_id || !formData.warehouse_id) {
+      toast.error('Complete los campos requeridos');
       return;
     }
 
     if (!selectedUser && !formData.password) {
-      Alert.alert('Error', 'La contraseña es requerida para crear un usuario');
+      toast.error('La contraseña es requerida para crear un usuario');
+      return;
+    }
+    if (formData.password && formData.password.length < 6) {
+      toast.error('La contraseña debe tener al menos 6 caracteres');
       return;
     }
 
     try {
-      const data = {
-        ...formData,
-        role_id: parseInt(formData.role_id),
+      setIsSaving(true);
+      const payload = {
+        username: formData.username.trim(),
+        email: formData.email.trim(),
+        role_id: parseInt(formData.role_id, 10),
+        warehouse_id: parseInt(formData.warehouse_id, 10),
+        pin_code: formData.pin_code || undefined,
+        status: (formData.isActive ? 'active' : 'inactive') as 'active' | 'inactive',
+        ...(formData.password ? { password: formData.password } : {}),
       };
 
       if (selectedUser) {
-        await extendedUserService.updateUser(selectedUser.id, data as any);
-        Alert.alert('Éxito', 'Usuario actualizado correctamente');
+        await extendedUserService.updateUser(selectedUser.id, payload);
+        toast.success('Usuario actualizado correctamente');
       } else {
-        await extendedUserService.createUser(data as any);
-        Alert.alert('Éxito', 'Usuario creado correctamente');
+        await extendedUserService.createUser({ ...payload, password: formData.password });
+        toast.success('Usuario creado correctamente');
       }
 
       setShowModal(false);
       loadData();
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'No se pudo guardar el usuario');
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || 'No se pudo guardar el usuario');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -155,12 +169,12 @@ export default function UsersScreen() {
 
     try {
       await extendedUserService.deleteUser(userToDelete.id);
-      Alert.alert('Éxito', 'Usuario eliminado correctamente');
+      toast.success('Usuario eliminado correctamente');
       setShowDeleteConfirm(false);
       setUserToDelete(null);
       loadData();
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'No se pudo eliminar el usuario');
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || 'No se pudo eliminar el usuario');
     }
   };
 
@@ -184,13 +198,13 @@ export default function UsersScreen() {
           </View>
           <View style={[
             styles.statusBadge,
-            { backgroundColor: item.is_active ? Colors.successLight : Colors.errorLight }
+            { backgroundColor: item.status !== 'inactive' ? Colors.successLight : Colors.errorLight }
           ]}>
             <Text style={[
               styles.statusText,
-              { color: item.is_active ? Colors.success : Colors.error }
+              { color: item.status !== 'inactive' ? Colors.success : Colors.error }
             ]}>
-              {item.is_active ? 'Activo' : 'Inactivo'}
+              {item.status !== 'inactive' ? 'Activo' : 'Inactivo'}
             </Text>
           </View>
         </View>
@@ -244,6 +258,7 @@ export default function UsersScreen() {
         data={filteredUsers}
         renderItem={renderUserItem}
         keyExtractor={(item) => item.id.toString()}
+        style={styles.listBody}
         contentContainerStyle={styles.listContent}
         refreshControl={
           <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
@@ -309,7 +324,7 @@ export default function UsersScreen() {
               Rol <Text style={styles.required}>*</Text>
             </Text>
             <View style={styles.pickerContainer}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.roleScroll}>
                 {roles.map((role) => (
                   <TouchableOpacity
                     key={role.id}
@@ -325,7 +340,34 @@ export default function UsersScreen() {
                         formData.role_id === role.id.toString() && styles.roleOptionTextSelected,
                       ]}
                     >
-                      {role.name}
+                      {role.role_name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+
+            <Text style={styles.label}>
+              Bodega <Text style={styles.required}>*</Text>
+            </Text>
+            <View style={styles.pickerContainer}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.roleScroll}>
+                {warehouses.map((w) => (
+                  <TouchableOpacity
+                    key={w.id}
+                    style={[
+                      styles.roleOption,
+                      formData.warehouse_id === w.id.toString() && styles.roleOptionSelected,
+                    ]}
+                    onPress={() => setFormData({ ...formData, warehouse_id: w.id.toString() })}
+                  >
+                    <Text
+                      style={[
+                        styles.roleOptionText,
+                        formData.warehouse_id === w.id.toString() && styles.roleOptionTextSelected,
+                      ]}
+                    >
+                      {w.name}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -342,19 +384,28 @@ export default function UsersScreen() {
               maxLength={4}
             />
 
-            <TouchableOpacity
-              style={styles.switchContainer}
-              onPress={() => setFormData({ ...formData, is_active: !formData.is_active })}
-            >
+            <View style={styles.switchContainer}>
               <Text style={styles.label}>Usuario activo</Text>
-              <View style={[styles.switch, formData.is_active && styles.switchActive]}>
-                <View style={[styles.switchThumb, formData.is_active && styles.switchThumbActive]} />
-              </View>
-            </TouchableOpacity>
+              <Switch
+                value={formData.isActive}
+                onValueChange={(value) => setFormData({ ...formData, isActive: value })}
+                trackColor={{ true: Colors.primary }}
+              />
+            </View>
 
-            <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-              <Ionicons name="checkmark-circle" size={20} color={Colors.white} />
-              <Text style={styles.saveButtonText}>Guardar Usuario</Text>
+            <TouchableOpacity
+              style={[styles.saveButton, isSaving && { opacity: 0.6 }]}
+              onPress={handleSave}
+              disabled={isSaving}
+            >
+              {isSaving ? (
+                <ActivityIndicator size="small" color={Colors.white} />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle" size={20} color={Colors.white} />
+                  <Text style={styles.saveButtonText}>Guardar Usuario</Text>
+                </>
+              )}
             </TouchableOpacity>
           </ScrollView>
         </View>
@@ -379,7 +430,7 @@ export default function UsersScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.primary,
   },
   header: {
     flexDirection: 'row',
@@ -397,6 +448,10 @@ const styles = StyleSheet.create({
   searchContainer: {
     padding: Spacing.md,
     backgroundColor: Colors.white,
+  },
+  listBody: {
+    flex: 1,
+    backgroundColor: Colors.background,
   },
   listContent: {
     padding: Spacing.md,
@@ -517,6 +572,11 @@ const styles = StyleSheet.create({
   },
   pickerContainer: {
     marginBottom: Spacing.md,
+  },
+  roleScroll: {
+    flexGrow: 0,
+    flexShrink: 0,
+    height: 56,
   },
   roleOption: {
     paddingHorizontal: Spacing.lg,

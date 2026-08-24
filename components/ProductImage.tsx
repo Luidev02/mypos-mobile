@@ -73,7 +73,7 @@ export function ProductImage({
 
       setLoading(false);
     } catch (err) {
-      console.error('Error loading image:', err);
+      // Esperado cuando el producto no tiene imagen subida — no es un error real
       setError(true);
       setLoading(false);
     }

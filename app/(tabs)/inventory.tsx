@@ -1,210 +1,115 @@
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorState } from '@/components/ErrorState';
+import { LoadingState } from '@/components/LoadingState';
 import { ProductImage } from '@/components/ProductImage';
 import { SearchBar } from '@/components/SearchBar';
-import { BorderRadius, Colors, FontSize, FontWeight, Spacing } from '@/constants/theme';
-import { extendedProductService, inventoryService } from '@/services';
-import { extendedInventoryService } from '@/services/extended';
-import type { CreateInventoryAdjustmentRequest, InventoryItem, ProductDetailed } from '@/types';
+import { BorderRadius, Colors, FontSize, FontWeight, Shadow, Spacing } from '@/constants/theme';
+import { warehouseService } from '@/services/extended';
+import type { Warehouse, WarehouseStock } from '@/types';
+import { formatQuantityWithUnit } from '@/utils/units';
 import { Ionicons } from '@expo/vector-icons';
+import { Picker } from '@react-native-picker/picker';
+import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    Modal,
-    Platform,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  FlatList,
+  Platform,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function InventoryScreen() {
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
-  const [filteredInventory, setFilteredInventory] = useState<InventoryItem[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [selectedWarehouse, setSelectedWarehouse] = useState('');
+  const [items, setItems] = useState<WarehouseStock[]>([]);
+  const [filteredItems, setFilteredItems] = useState<WarehouseStock[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'all' | 'low' | 'out'>('all');
 
-  // Modal de ajuste rápido
-  const [showQuickAdjustModal, setShowQuickAdjustModal] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<ProductDetailed | null>(null);
-  const [products, setProducts] = useState<ProductDetailed[]>([]);
-  const [adjustmentType, setAdjustmentType] = useState<'entry' | 'exit' | 'adjustment'>('adjustment');
-  const [adjustmentQuantity, setAdjustmentQuantity] = useState('');
-  const [adjustmentReason, setAdjustmentReason] = useState('');
-  const [adjustmentNotes, setAdjustmentNotes] = useState('');
-  const [productSearchQuery, setProductSearchQuery] = useState('');
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await warehouseService.getWarehouses();
+        setWarehouses(data);
+        if (data.length > 0) {
+          setSelectedWarehouse(String(data[0].id));
+        } else {
+          setIsLoading(false);
+        }
+      } catch (e) {
+        console.error('Error cargando bodegas', e);
+        setIsLoading(false);
+      }
+    })();
+  }, []);
 
-  const loadInventory = async () => {
+  const loadStock = useCallback(async () => {
+    if (!selectedWarehouse) return;
     try {
       setIsLoading(true);
       setError(null);
-      const data = await inventoryService.getInventory();
-      setInventory(data);
-    } catch (error: any) {
-      setError(error.message || 'Error al cargar inventario');
+      const data = await warehouseService.getWarehouseStock(Number(selectedWarehouse));
+      setItems(data);
+    } catch (e: any) {
+      setError(e.message || 'No se pudo cargar el inventario');
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  };
+  }, [selectedWarehouse]);
 
-  const loadProducts = async () => {
-    try {
-      const data = await extendedProductService.getProducts();
-      setProducts(data);
-    } catch (error) {
-      console.error('Error loading products:', error);
-    }
-  };
+  useFocusEffect(
+    useCallback(() => {
+      loadStock();
+    }, [loadStock])
+  );
 
   useEffect(() => {
-    loadInventory();
-    loadProducts();
-  }, []);
-
-  useEffect(() => {
-    filterInventory();
-  }, [searchQuery, inventory, filter]);
-
-  const handleOpenQuickAdjust = () => {
-    setSelectedProduct(null);
-    setAdjustmentType('adjustment');
-    setAdjustmentQuantity('');
-    setAdjustmentReason('');
-    setAdjustmentNotes('');
-    setProductSearchQuery('');
-    setShowQuickAdjustModal(true);
-  };
-
-  const handleSaveAdjustment = async () => {
-    if (!selectedProduct) {
-      Alert.alert('Error', 'Seleccione un producto');
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) {
+      setFilteredItems(items);
       return;
     }
-
-    if (!adjustmentQuantity || Number(adjustmentQuantity) <= 0) {
-      Alert.alert('Error', 'Ingrese una cantidad válida');
-      return;
-    }
-
-    if (!adjustmentReason.trim()) {
-      Alert.alert('Error', 'Ingrese un motivo');
-      return;
-    }
-
-    try {
-      const quantity = Number(adjustmentQuantity);
-      const adjustmentData: CreateInventoryAdjustmentRequest = {
-        product_id: selectedProduct.id,
-        warehouse_id: 1,
-        quantity: adjustmentType === 'exit' ? -quantity : quantity,
-        type: adjustmentType,
-        reason: adjustmentReason,
-        notes: adjustmentNotes || undefined,
-      };
-
-      await extendedInventoryService.adjustInventory(adjustmentData);
-      Alert.alert('Éxito', 'Ajuste de inventario realizado');
-      setShowQuickAdjustModal(false);
-      loadInventory();
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'No se pudo realizar el ajuste');
-    }
-  };
-
-  const filteredProducts = products.filter((p) => {
-    if (!productSearchQuery) return true;
-    const query = productSearchQuery.toLowerCase();
-    const name = p.name?.toLowerCase() || '';
-    const sku = p.sku?.toLowerCase() || '';
-    return name.includes(query) || sku.includes(query);
-  });
+    setFilteredItems(
+      items.filter(
+        (it) =>
+          (it.product_title || '').toLowerCase().includes(query) ||
+          (it.sku || '').toLowerCase().includes(query) ||
+          (it.barcode || '').toLowerCase().includes(query) ||
+          (it.location_in_warehouse || '').toLowerCase().includes(query)
+      )
+    );
+  }, [searchQuery, items]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await loadInventory();
+    await loadStock();
   };
 
-  const filterInventory = () => {
-    let filtered = inventory;
-
-    // Aplicar filtro de búsqueda
-    if (searchQuery && searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter((item) => {
-        const title = item.product_title?.toLowerCase() || '';
-        const sku = item.sku?.toLowerCase() || '';
-        return title.includes(query) || sku.includes(query);
-      });
-    }
-
-    // Aplicar filtro de estado
-    switch (filter) {
-      case 'low':
-        filtered = filtered.filter((item) => {
-          const stockAlert = item.stock_alert || 10;
-          const quantity = item.quantity || 0;
-          return quantity <= stockAlert && quantity > 0;
-        });
-        break;
-      case 'out':
-        filtered = filtered.filter((item) => (item.quantity || 0) === 0);
-        break;
-    }
-
-    setFilteredInventory(filtered);
+  const getStockStatus = (item: WarehouseStock) => {
+    const qty = Number(item.quantity) || 0;
+    const alert = Number(item.stock_alert) || 5;
+    if (qty === 0) return { status: 'critical', color: '#EF4444', label: 'Agotado' };
+    if (qty <= alert) return { status: 'low', color: '#F59E0B', label: 'Stock Bajo' };
+    return { status: 'normal', color: '#10B981', label: 'Normal' };
   };
 
-  const getStockStatus = (item: InventoryItem) => {
-    const stockAlert = item.stock_alert || 10;
-    if (item.quantity === 0) return 'out';
-    if (item.quantity <= stockAlert) return 'low';
-    return 'good';
-  };
-
-  const getStockColor = (status: string) => {
-    switch (status) {
-      case 'out':
-        return '#EF4444';
-      case 'low':
-        return '#F59E0B';
-      default:
-        return '#10B981';
-    }
-  };
-
-  const getStockLabel = (status: string) => {
-    switch (status) {
-      case 'out':
-        return 'Sin Stock';
-      case 'low':
-        return 'Stock Bajo';
-      default:
-        return 'Disponible';
-    }
-  };
-
-  // Calcular estadísticas
-  const totalProducts = inventory.length;
-  const lowStockCount = inventory.filter((item) => {
-    const stockAlert = item.stock_alert || 10;
-    return item.quantity <= stockAlert && item.quantity > 0;
+  const totalProducts = items.length;
+  const lowStockCount = items.filter((it) => {
+    const s = getStockStatus(it);
+    return s.status === 'low';
   }).length;
-  const outOfStockCount = inventory.filter((item) => item.quantity === 0).length;
+  const outOfStockCount = items.filter((it) => (Number(it.quantity) || 0) === 0).length;
 
-  const renderInventoryItem = ({ item }: { item: InventoryItem }) => {
+  const renderItem = ({ item }: { item: WarehouseStock }) => {
     const status = getStockStatus(item);
-    const statusColor = getStockColor(status);
 
     return (
       <TouchableOpacity
@@ -223,27 +128,24 @@ export default function InventoryScreen() {
           <Text style={styles.productName} numberOfLines={2}>
             {item.product_title || `Producto #${item.product_id}`}
           </Text>
-          {item.sku && (
-            <Text style={styles.productSku}>SKU: {item.sku}</Text>
-          )}
+          {item.sku && <Text style={styles.productSku}>SKU: {item.sku}</Text>}
+          {item.location_in_warehouse ? (
+            <Text style={styles.productLocation}>{item.location_in_warehouse}</Text>
+          ) : null}
           <View style={styles.productMeta}>
-            <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
-              <Text style={[styles.statusText, { color: statusColor }]}>
-                {getStockLabel(status)}
-              </Text>
+            <View style={[styles.statusBadge, { backgroundColor: status.color + '20' }]}>
+              <Text style={[styles.statusText, { color: status.color }]}>{status.label}</Text>
             </View>
           </View>
         </View>
 
         <View style={styles.stockSection}>
           <Text style={styles.stockLabel}>Stock</Text>
-          <Text style={[styles.stockValue, { color: statusColor }]}>
-            {item.quantity}
+          <Text style={[styles.stockValue, { color: status.color }]}>
+            {formatQuantityWithUnit(item.quantity, item)}
           </Text>
-          {item.stock_alert && (
-            <Text style={styles.stockAlert}>
-              Min: {item.stock_alert}
-            </Text>
+          {item.stock_alert !== undefined && (
+            <Text style={styles.stockAlert}>Min: {item.stock_alert}</Text>
           )}
         </View>
 
@@ -252,16 +154,12 @@ export default function InventoryScreen() {
     );
   };
 
-  if (isLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-      </View>
-    );
+  if (isLoading && items.length === 0) {
+    return <LoadingState message="Cargando inventario..." />;
   }
 
   if (error) {
-    return <ErrorState message={error} onRetry={loadInventory} />;
+    return <ErrorState message={error} onRetry={loadStock} />;
   }
 
   return (
@@ -272,8 +170,8 @@ export default function InventoryScreen() {
           <Ionicons name="arrow-back" size={24} color={Colors.white} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Inventario</Text>
-        <TouchableOpacity onPress={handleOpenQuickAdjust} style={styles.addButton}>
-          <Ionicons name="add-circle" size={32} color={Colors.white} />
+        <TouchableOpacity onPress={() => router.push('/inventory/low-stock' as any)} style={styles.addButton}>
+          <Ionicons name="alert-circle" size={26} color={Colors.white} />
         </TouchableOpacity>
       </View>
 
@@ -296,242 +194,51 @@ export default function InventoryScreen() {
         </View>
       </View>
 
+      {/* Bodega */}
+      <View style={styles.warehouseContainer}>
+        <Text style={styles.filterLabel}>Bodega</Text>
+        <View style={styles.pickerWrapper}>
+          <Picker selectedValue={selectedWarehouse} onValueChange={(v) => setSelectedWarehouse(String(v))}>
+            {warehouses.map((w) => (
+              <Picker.Item key={w.id} label={w.name} value={String(w.id)} />
+            ))}
+          </Picker>
+        </View>
+      </View>
+
       {/* Search */}
       <View style={styles.searchContainer}>
         <SearchBar
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholder="Buscar por nombre o SKU..."
+          placeholder="Nombre, SKU, código de barras o ubicación..."
         />
       </View>
 
-      {/* Filters */}
-      <View style={styles.filterContainer}>
-        <TouchableOpacity
-          style={[styles.filterButton, filter === 'all' && styles.filterButtonActive]}
-          onPress={() => setFilter('all')}
-        >
-          <Text style={[styles.filterText, filter === 'all' && styles.filterTextActive]}>
-            Todos
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.filterButton, filter === 'low' && styles.filterButtonActive]}
-          onPress={() => setFilter('low')}
-        >
-          <Text style={[styles.filterText, filter === 'low' && styles.filterTextActive]}>
-            Stock Bajo
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.filterButton, filter === 'out' && styles.filterButtonActive]}
-          onPress={() => setFilter('out')}
-        >
-          <Text style={[styles.filterText, filter === 'out' && styles.filterTextActive]}>
-            Sin Stock
-          </Text>
+      {/* Botón de ajuste */}
+      <View style={styles.actionsRow}>
+        <TouchableOpacity style={styles.adjustButton} onPress={() => router.push('/inventory/adjust' as any)}>
+          <Ionicons name="add-circle-outline" size={18} color={Colors.white} />
+          <Text style={styles.adjustButtonText}>Ajustar Inventario</Text>
         </TouchableOpacity>
       </View>
 
-      {filteredInventory.length === 0 ? (
+      {filteredItems.length === 0 ? (
         <EmptyState
           icon="cube-outline"
           title="No hay productos"
-          message={searchQuery ? 'No se encontraron productos' : 'El inventario está vacío'}
+          message={searchQuery ? 'No se encontraron productos' : 'Esta bodega no tiene stock registrado'}
         />
       ) : (
         <FlatList
-          data={filteredInventory}
-          renderItem={renderInventoryItem}
-          keyExtractor={(item) => item.product_id.toString()}
+          data={filteredItems}
+          renderItem={renderItem}
+          keyExtractor={(item) => `${item.warehouse_id}-${item.product_id}`}
+          style={styles.listBody}
           contentContainerStyle={[styles.list, { paddingBottom: 100 }]}
-          refreshControl={
-            <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
-          }
+          refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
         />
       )}
-      
-      {/* Botón flotante para ajuste rápido */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={handleOpenQuickAdjust}
-        activeOpacity={0.8}
-      >
-        <Ionicons name="add" size={28} color="#FFFFFF" />
-      </TouchableOpacity>
-
-      {/* Modal de ajuste rápido */}
-      <Modal visible={showQuickAdjustModal} animationType="slide" presentationStyle="pageSheet">
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={() => setShowQuickAdjustModal(false)}>
-              <Ionicons name="close" size={28} color={Colors.text} />
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>Ajuste Rápido</Text>
-            <View style={{ width: 28 }} />
-          </View>
-
-          <ScrollView style={styles.modalContent}>
-            {/* Selector de tipo */}
-            <Text style={styles.label}>Tipo de Ajuste</Text>
-            <View style={styles.typeContainer}>
-              <TouchableOpacity
-                style={[
-                  styles.typeButton,
-                  adjustmentType === 'entry' && styles.typeButtonActive,
-                  { borderColor: '#10B981' },
-                ]}
-                onPress={() => setAdjustmentType('entry')}
-              >
-                <Ionicons
-                  name="arrow-up-circle"
-                  size={24}
-                  color={adjustmentType === 'entry' ? '#10B981' : Colors.textLight}
-                />
-                <Text style={[
-                  styles.typeButtonText,
-                  adjustmentType === 'entry' && { color: '#10B981' }
-                ]}>
-                  Entrada
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.typeButton,
-                  adjustmentType === 'exit' && styles.typeButtonActive,
-                  { borderColor: '#EF4444' },
-                ]}
-                onPress={() => setAdjustmentType('exit')}
-              >
-                <Ionicons
-                  name="arrow-down-circle"
-                  size={24}
-                  color={adjustmentType === 'exit' ? '#EF4444' : Colors.textLight}
-                />
-                <Text style={[
-                  styles.typeButtonText,
-                  adjustmentType === 'exit' && { color: '#EF4444' }
-                ]}>
-                  Salida
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.typeButton,
-                  adjustmentType === 'adjustment' && styles.typeButtonActive,
-                  { borderColor: Colors.primary },
-                ]}
-                onPress={() => setAdjustmentType('adjustment')}
-              >
-                <Ionicons
-                  name="settings"
-                  size={24}
-                  color={adjustmentType === 'adjustment' ? Colors.primary : Colors.textLight}
-                />
-                <Text style={[
-                  styles.typeButtonText,
-                  adjustmentType === 'adjustment' && { color: Colors.primary }
-                ]}>
-                  Ajuste
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Selector de producto */}
-            <Text style={styles.label}>
-              Producto <Text style={styles.required}>*</Text>
-            </Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Buscar producto..."
-              value={productSearchQuery}
-              onChangeText={setProductSearchQuery}
-            />
-
-            {productSearchQuery.length > 0 && (
-              <ScrollView style={styles.productsList} nestedScrollEnabled>
-                {filteredProducts.slice(0, 5).map((product) => (
-                  <TouchableOpacity
-                    key={product.id}
-                    style={[
-                      styles.productItem,
-                      selectedProduct?.id === product.id && styles.productItemSelected,
-                    ]}
-                    onPress={() => {
-                      setSelectedProduct(product);
-                      setProductSearchQuery(product.name);
-                    }}
-                  >
-                    <ProductImage
-                      productId={product.id}
-                      style={styles.productItemImage}
-                      placeholderSize={16}
-                    />
-                    <View style={styles.productItemInfo}>
-                      <Text style={styles.productItemName}>{product.name}</Text>
-                      <Text style={styles.productItemSku}>SKU: {product.sku}</Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            )}
-
-            {selectedProduct && (
-              <View style={styles.selectedProductCard}>
-                <ProductImage
-                  productId={selectedProduct.id}
-                  style={styles.selectedProductImage}
-                  placeholderSize={24}
-                />
-                <View>
-                  <Text style={styles.selectedProductName}>{selectedProduct.name}</Text>
-                  <Text style={styles.selectedProductStock}>
-                    Stock actual: {selectedProduct.stock || selectedProduct.quantity || 0}
-                  </Text>
-                </View>
-              </View>
-            )}
-
-            <Text style={styles.label}>
-              Cantidad <Text style={styles.required}>*</Text>
-            </Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Cantidad"
-              value={adjustmentQuantity}
-              onChangeText={setAdjustmentQuantity}
-              keyboardType="numeric"
-            />
-
-            <Text style={styles.label}>
-              Motivo <Text style={styles.required}>*</Text>
-            </Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Ej: Compra, Devolución, Ajuste por inventario"
-              value={adjustmentReason}
-              onChangeText={setAdjustmentReason}
-            />
-
-            <Text style={styles.label}>Notas</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              placeholder="Notas adicionales (opcional)"
-              value={adjustmentNotes}
-              onChangeText={setAdjustmentNotes}
-              multiline
-              numberOfLines={4}
-            />
-
-            <TouchableOpacity style={styles.saveButton} onPress={handleSaveAdjustment}>
-              <Ionicons name="checkmark-circle" size={20} color={Colors.white} />
-              <Text style={styles.saveButtonText}>Guardar Ajuste</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -539,23 +246,17 @@ export default function InventoryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.primary,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
+    paddingTop: Platform.OS === 'ios' ? 8 : Spacing.lg,
+    paddingBottom: Spacing.lg,
     backgroundColor: Colors.primary,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.primaryDark,
+    ...Shadow.sm,
   },
   backButton: {
     padding: Spacing.xs,
@@ -606,209 +307,54 @@ const styles = StyleSheet.create({
     marginTop: Spacing.xs,
     textAlign: 'center',
   },
+  warehouseContainer: {
+    paddingHorizontal: Spacing.md,
+    paddingBottom: Spacing.sm,
+    backgroundColor: Colors.white,
+  },
+  filterLabel: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.semibold,
+    color: Colors.textLight,
+    textTransform: 'uppercase',
+    marginBottom: Spacing.xs,
+  },
+  pickerWrapper: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: BorderRadius.md,
+    overflow: 'hidden',
+  },
   searchContainer: {
     paddingHorizontal: Spacing.md,
     paddingBottom: Spacing.sm,
     backgroundColor: Colors.white,
   },
-  filterContainer: {
-    flexDirection: 'row',
+  actionsRow: {
     paddingHorizontal: Spacing.md,
     paddingBottom: Spacing.md,
-    gap: Spacing.sm,
     backgroundColor: Colors.white,
   },
-  filterButton: {
-    flex: 1,
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.xs,
-    borderRadius: BorderRadius.md,
-    backgroundColor: Colors.background,
+  adjustButton: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    backgroundColor: '#3B82F6',
+    borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.sm,
   },
-  filterButtonActive: {
-    backgroundColor: Colors.primary,
-  },
-  filterText: {
+  adjustButtonText: {
     fontSize: FontSize.sm,
     fontWeight: FontWeight.semibold,
-    color: Colors.text,
-  },
-  filterTextActive: {
     color: Colors.white,
+  },
+  listBody: {
+    flex: 1,
+    backgroundColor: Colors.background,
   },
   list: {
     padding: Spacing.md,
-  },
-  fab: {
-    position: 'absolute',
-    right: 20,
-    bottom: Platform.OS === 'ios' ? 90 : 80,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: Colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 4.65,
-    elevation: 8,
-    zIndex: 1000,
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: Spacing.lg,
-    backgroundColor: Colors.white,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  modalTitle: {
-    fontSize: FontSize.xl,
-    fontWeight: FontWeight.bold,
-    color: Colors.text,
-  },
-  modalContent: {
-    flex: 1,
-    padding: Spacing.lg,
-  },
-  label: {
-    fontSize: FontSize.md,
-    fontWeight: FontWeight.semibold,
-    color: Colors.text,
-    marginBottom: Spacing.xs,
-    marginTop: Spacing.md,
-  },
-  required: {
-    color: Colors.error,
-  },
-  typeContainer: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-    marginBottom: Spacing.md,
-  },
-  typeButton: {
-    flex: 1,
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: Spacing.md,
-    borderRadius: BorderRadius.md,
-    borderWidth: 2,
-    backgroundColor: Colors.white,
-    gap: Spacing.xs,
-  },
-  typeButtonActive: {
-    backgroundColor: Colors.background,
-  },
-  typeButtonText: {
-    fontSize: FontSize.sm,
-    fontWeight: FontWeight.semibold,
-    color: Colors.textLight,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    fontSize: FontSize.md,
-    color: Colors.text,
-    backgroundColor: Colors.white,
-  },
-  textArea: {
-    height: 100,
-    textAlignVertical: 'top',
-  },
-  productsList: {
-    maxHeight: 200,
-    marginBottom: Spacing.md,
-  },
-  productItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: Spacing.md,
-    backgroundColor: Colors.white,
-    borderRadius: BorderRadius.md,
-    marginBottom: Spacing.xs,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  productItemSelected: {
-    borderColor: Colors.primary,
-    backgroundColor: Colors.primaryLight + '10',
-  },
-  productItemImage: {
-    width: 40,
-    height: 40,
-    borderRadius: BorderRadius.sm,
-    marginRight: Spacing.md,
-  },
-  productItemInfo: {
-    flex: 1,
-  },
-  productItemName: {
-    fontSize: FontSize.md,
-    fontWeight: FontWeight.semibold,
-    color: Colors.text,
-  },
-  productItemSku: {
-    fontSize: FontSize.sm,
-    color: Colors.textSecondary,
-  },
-  selectedProductCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.primaryLight + '20',
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    marginBottom: Spacing.md,
-    borderWidth: 1,
-    borderColor: Colors.primary,
-  },
-  selectedProductImage: {
-    width: 50,
-    height: 50,
-    borderRadius: BorderRadius.sm,
-    marginRight: Spacing.md,
-  },
-  selectedProductName: {
-    fontSize: FontSize.md,
-    fontWeight: FontWeight.bold,
-    color: Colors.text,
-    marginBottom: Spacing.xs,
-  },
-  selectedProductStock: {
-    fontSize: FontSize.sm,
-    color: Colors.textSecondary,
-  },
-  saveButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.sm,
-    backgroundColor: Colors.success,
-    borderRadius: BorderRadius.md,
-    padding: Spacing.lg,
-    marginTop: Spacing.xl,
-    marginBottom: Spacing.xl,
-  },
-  saveButtonText: {
-    fontSize: FontSize.md,
-    fontWeight: FontWeight.semibold,
-    color: Colors.white,
   },
   inventoryCard: {
     flexDirection: 'row',
@@ -843,6 +389,11 @@ const styles = StyleSheet.create({
     color: Colors.textLight,
     marginBottom: Spacing.xs,
   },
+  productLocation: {
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+    marginBottom: Spacing.xs,
+  },
   productMeta: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -866,7 +417,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xs,
   },
   stockValue: {
-    fontSize: FontSize.xl,
+    fontSize: FontSize.lg,
     fontWeight: FontWeight.bold,
     marginBottom: Spacing.xs,
   },

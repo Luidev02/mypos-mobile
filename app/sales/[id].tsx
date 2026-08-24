@@ -6,17 +6,103 @@ import type { SaleDetailed, SaleItemDetailed } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { 
-  Alert, 
-  ScrollView, 
-  StyleSheet, 
-  Text, 
-  TouchableOpacity, 
+import {
+  Alert,
+  Linking,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
   View,
   Platform,
   Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+// Bloque DIAN — réplica de los 5 estados de `sales/detail.jsx:294-434`. En vez
+// de generar una imagen QR en el dispositivo (el web usa el paquete `qrcode`
+// vía Canvas del navegador, sin equivalente directo en RN sin agregar una
+// dependencia nueva), se ofrece el mismo link de verificación como texto
+// tocable — el CUFE se puede verificar igual, solo que abriendo el navegador
+// en vez de escanear un código en la misma pantalla que lo muestra.
+function DianSection({ sale }: { sale: SaleDetailed }) {
+  const verifyUrl = sale.cufe
+    ? `https://catalogo-vpfe.dian.gov.co/document/searchqr?documentkey=${sale.cufe}`
+    : null;
+
+  const CufeBlock = () =>
+    sale.cufe ? (
+      <>
+        <Text style={styles.dianCufeLabel}>CUFE</Text>
+        <Text style={styles.dianCufe} selectable>
+          {sale.cufe}
+        </Text>
+        {verifyUrl && (
+          <TouchableOpacity onPress={() => Linking.openURL(verifyUrl)}>
+            <Text style={styles.dianLink}>Verificar en el portal DIAN</Text>
+          </TouchableOpacity>
+        )}
+      </>
+    ) : null;
+
+  if (sale.dian_status === 'approved') {
+    return (
+      <View style={[styles.dianCard, styles.dianCardApproved]}>
+        <Text style={[styles.dianTitle, { color: '#166534' }]}>✓ Factura Electrónica Aprobada</Text>
+        <CufeBlock />
+        {sale.dian_pdf_url && (
+          <TouchableOpacity onPress={() => Linking.openURL(sale.dian_pdf_url!)}>
+            <Text style={styles.dianLink}>Ver PDF de factura</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  }
+
+  if (sale.dian_status === 'processing') {
+    return (
+      <View style={[styles.dianCard, styles.dianCardProcessing]}>
+        <Text style={[styles.dianTitle, { color: '#92400E' }]}>⏳ Procesando envío a la DIAN</Text>
+        <CufeBlock />
+      </View>
+    );
+  }
+
+  if (sale.dian_status === 'rejected' && sale.cufe) {
+    return (
+      <View style={[styles.dianCard, styles.dianCardWarning]}>
+        <Text style={[styles.dianTitle, { color: '#9A3412' }]}>⚠️ Factura con observaciones DIAN</Text>
+        <CufeBlock />
+        {sale.dian_pdf_url && (
+          <TouchableOpacity onPress={() => Linking.openURL(sale.dian_pdf_url!)}>
+            <Text style={styles.dianLink}>Ver PDF de factura</Text>
+          </TouchableOpacity>
+        )}
+        {sale.dian_response_message && (
+          <Text style={styles.dianMessage}>Observación DIAN: {sale.dian_response_message}</Text>
+        )}
+      </View>
+    );
+  }
+
+  if (sale.dian_status === 'rejected') {
+    return (
+      <View style={[styles.dianCard, styles.dianCardError]}>
+        <Text style={[styles.dianTitle, { color: '#991B1B' }]}>✗ No se pudo enviar a la DIAN</Text>
+        {sale.dian_response_message && (
+          <Text style={styles.dianMessage}>Detalle del error: {sale.dian_response_message}</Text>
+        )}
+      </View>
+    );
+  }
+
+  // not_sent
+  return (
+    <View style={[styles.dianCard, styles.dianCardNeutral]}>
+      <Text style={styles.dianTitle}>Pendiente de envío a la DIAN</Text>
+    </View>
+  );
+}
 
 export default function SaleDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -46,16 +132,18 @@ export default function SaleDetailScreen() {
   const handleShare = async () => {
     if (!sale) return;
 
+    const discountAmount = Number(sale.discount_amount ?? sale.discount ?? 0);
     const message = `
 Venta #${sale.invoice_number || sale.id}
 Cliente: ${sale.customer_name || 'Consumidor Final'}
-Fecha: ${new Date(sale.created_at).toLocaleString('es-ES')}
+Fecha: ${new Date(sale.created_at).toLocaleString('es-CO')}
 
 Subtotal: $${Number(sale.subtotal || 0).toFixed(2)}
-${sale.discount > 0 ? `Descuento: -$${Number(sale.discount).toFixed(2)}\n` : ''}IVA: $${Number(sale.tax || sale.tax_amount || 0).toFixed(2)}
+${discountAmount > 0 ? `Descuento: -$${discountAmount.toFixed(2)}\n` : ''}IVA: $${Number(sale.tax_amount || sale.tax || 0).toFixed(2)}
 TOTAL: $${Number(sale.total || 0).toFixed(2)}
 
 Método de pago: ${sale.payment_method}
+${sale.cufe ? `\nCUFE: ${sale.cufe}` : ''}
     `.trim();
 
     try {
@@ -95,23 +183,29 @@ Método de pago: ${sale.payment_method}
     }
   };
 
-  const renderProductItem = ({ item, index }: { item: SaleItemDetailed; index: number }) => (
-    <View key={index} style={styles.productItem}>
-      <View style={styles.productInfo}>
-        <Text style={styles.productName}>{item.product_name || `Producto #${item.product_id}`}</Text>
-        {item.sku && <Text style={styles.productSku}>SKU: {item.sku}</Text>}
+  const renderProductItem = ({ item, index }: { item: SaleItemDetailed; index: number }) => {
+    // `subtotal` ya viene calculado por el backend con el descuento de línea
+    // aplicado — no recalcular `quantity * price` acá (ignoraría `discount`).
+    const lineSubtotal = item.subtotal ?? Number(item.quantity) * Number(item.price);
+    return (
+      <View key={index} style={styles.productItem}>
+        <View style={styles.productInfo}>
+          <Text style={styles.productName}>{item.product_name || `Producto #${item.product_id}`}</Text>
+          {item.sku && <Text style={styles.productSku}>SKU: {item.sku}</Text>}
+          {!!item.discount && (
+            <Text style={styles.productDiscount}>Descuento: -${Number(item.discount).toFixed(2)}</Text>
+          )}
+        </View>
+        <View style={styles.productDetails}>
+          <Text style={styles.productQuantity}>x{item.quantity}</Text>
+          <Text style={styles.productPrice}>${Number(item.price).toFixed(2)}</Text>
+        </View>
+        <View style={styles.productTotal}>
+          <Text style={styles.productTotalText}>${lineSubtotal.toFixed(2)}</Text>
+        </View>
       </View>
-      <View style={styles.productDetails}>
-        <Text style={styles.productQuantity}>x{item.quantity}</Text>
-        <Text style={styles.productPrice}>${Number(item.price).toFixed(2)}</Text>
-      </View>
-      <View style={styles.productTotal}>
-        <Text style={styles.productTotalText}>
-          ${(Number(item.quantity) * Number(item.price)).toFixed(2)}
-        </Text>
-      </View>
-    </View>
-  );
+    );
+  };
 
   if (isLoading) {
     return <LoadingState />;
@@ -133,7 +227,7 @@ Método de pago: ${sale.payment_method}
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView style={styles.scrollBody} contentContainerStyle={styles.content}>
         {/* Header Card */}
         <View style={styles.headerCard}>
           <View style={styles.invoiceSection}>
@@ -173,6 +267,15 @@ Método de pago: ${sale.payment_method}
                 <Text style={styles.infoValue}>{sale.customer_name || 'Consumidor Final'}</Text>
               </View>
             </View>
+            {sale.customer_identification && (
+              <View style={[styles.infoRow, { marginTop: Spacing.sm }]}>
+                <Ionicons name="card-outline" size={20} color={Colors.textLight} />
+                <View style={styles.infoContent}>
+                  <Text style={styles.infoLabel}>Identificación</Text>
+                  <Text style={styles.infoValue}>{sale.customer_identification}</Text>
+                </View>
+              </View>
+            )}
             {sale.customer_phone && (
               <View style={[styles.infoRow, { marginTop: Spacing.sm }]}>
                 <Ionicons name="call-outline" size={20} color={Colors.textLight} />
@@ -184,6 +287,33 @@ Método de pago: ${sale.payment_method}
             )}
           </View>
         </View>
+
+        {/* Sale Details */}
+        {(sale.warehouse_name || sale.created_by_name) && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Detalles de la Venta</Text>
+            <View style={styles.infoCard}>
+              {sale.warehouse_name && (
+                <View style={styles.infoRow}>
+                  <Ionicons name="business-outline" size={20} color={Colors.textLight} />
+                  <View style={styles.infoContent}>
+                    <Text style={styles.infoLabel}>Bodega</Text>
+                    <Text style={styles.infoValue}>{sale.warehouse_name}</Text>
+                  </View>
+                </View>
+              )}
+              {sale.created_by_name && (
+                <View style={[styles.infoRow, sale.warehouse_name && { marginTop: Spacing.sm }]}>
+                  <Ionicons name="person-circle-outline" size={20} color={Colors.textLight} />
+                  <View style={styles.infoContent}>
+                    <Text style={styles.infoLabel}>Atendido por</Text>
+                    <Text style={styles.infoValue}>{sale.created_by_name}</Text>
+                  </View>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
 
         {/* Payment Info */}
         <View style={styles.section}>
@@ -231,21 +361,30 @@ Método de pago: ${sale.payment_method}
             <Text style={styles.summaryValue}>${Number(sale.subtotal || 0).toFixed(2)}</Text>
           </View>
 
-          {sale.discount > 0 && (
+          {Number(sale.discount_amount ?? sale.discount ?? 0) > 0 && (
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Descuento</Text>
               <Text style={[styles.summaryValue, { color: '#EF4444' }]}>
-                -${Number(sale.discount).toFixed(2)}
+                -${Number(sale.discount_amount ?? sale.discount ?? 0).toFixed(2)}
               </Text>
             </View>
           )}
 
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>IVA (19%)</Text>
+            <Text style={styles.summaryLabel}>Impuestos</Text>
             <Text style={styles.summaryValue}>
-              ${Number(sale.tax || sale.tax_amount || 0).toFixed(2)}
+              ${Number(sale.tax_amount ?? sale.tax ?? 0).toFixed(2)}
             </Text>
           </View>
+
+          {sale.profit_total !== undefined && sale.profit_total !== null && (
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Ganancia</Text>
+              <Text style={[styles.summaryValue, { color: '#16A34A' }]}>
+                ${Number(sale.profit_total).toFixed(2)}
+              </Text>
+            </View>
+          )}
 
           <View style={styles.summaryDivider} />
 
@@ -256,6 +395,20 @@ Método de pago: ${sale.payment_method}
             </Text>
           </View>
         </View>
+
+        {/* Bloque DIAN — igual a `sales/detail.jsx:294-434` */}
+        {sale.dian_status && sale.dian_status !== 'not_applicable' && (
+          <DianSection sale={sale} />
+        )}
+
+        {sale.dian_status === 'not_applicable' && sale.resolution_auth_number && (
+          <View style={styles.resolutionFooter}>
+            <Text style={styles.resolutionText}>
+              AUTORIZACIÓN NUM. DE FACTURACIÓN DIAN #{sale.resolution_auth_number} — AUTORIZA{' '}
+              {sale.resolution_prefix}-{sale.resolution_from} HASTA {sale.resolution_prefix}-{sale.resolution_to}
+            </Text>
+          </View>
+        )}
 
         {/* Actions */}
         <View style={styles.actionsContainer}>
@@ -276,7 +429,7 @@ Método de pago: ${sale.payment_method}
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.primary,
   },
   header: {
     flexDirection: 'row',
@@ -290,6 +443,10 @@ const styles = StyleSheet.create({
     fontSize: FontSize.lg,
     fontWeight: FontWeight.bold,
     color: Colors.white,
+  },
+  scrollBody: {
+    flex: 1,
+    backgroundColor: Colors.background,
   },
   content: {
     padding: Spacing.md,
@@ -395,6 +552,11 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xs,
     color: Colors.textLight,
   },
+  productDiscount: {
+    fontSize: FontSize.xs,
+    color: '#EF4444',
+    marginTop: 2,
+  },
   productDetails: {
     flex: 1,
     alignItems: 'flex-end',
@@ -458,6 +620,73 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xl,
     fontWeight: FontWeight.bold,
     color: Colors.primary,
+  },
+  dianCard: {
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    padding: Spacing.lg,
+    marginBottom: Spacing.md,
+    gap: Spacing.xs,
+  },
+  dianCardApproved: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#BBF7D0',
+  },
+  dianCardProcessing: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
+  },
+  dianCardWarning: {
+    backgroundColor: '#FFF7ED',
+    borderColor: '#FED7AA',
+  },
+  dianCardError: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+  },
+  dianCardNeutral: {
+    backgroundColor: Colors.white,
+    borderColor: Colors.border,
+  },
+  dianTitle: {
+    fontSize: FontSize.md,
+    fontWeight: FontWeight.bold,
+    color: Colors.text,
+    marginBottom: Spacing.xs,
+  },
+  dianCufeLabel: {
+    fontSize: FontSize.xs,
+    color: Colors.textLight,
+    textTransform: 'uppercase',
+    marginTop: Spacing.xs,
+  },
+  dianCufe: {
+    fontSize: FontSize.xs,
+    color: Colors.text,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    marginBottom: Spacing.xs,
+  },
+  dianLink: {
+    fontSize: FontSize.sm,
+    color: '#2563EB',
+    textDecorationLine: 'underline',
+    marginTop: Spacing.xs,
+  },
+  dianMessage: {
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+    marginTop: Spacing.sm,
+  },
+  resolutionFooter: {
+    backgroundColor: Colors.background,
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.md,
+    marginBottom: Spacing.md,
+  },
+  resolutionText: {
+    fontSize: FontSize.xs,
+    color: Colors.textLight,
+    textAlign: 'center',
   },
   actionsContainer: {
     flexDirection: 'row',

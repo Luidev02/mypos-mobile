@@ -5,8 +5,10 @@ import { useSale } from '@/contexts/SaleContext';
 import { posService } from '@/services';
 import type { CartItem, CreateSaleRequest, Shift } from '@/types';
 import { calculateTax, formatCurrency } from '@/utils/helpers';
+import { canSellQuantity, formatQuantityWithUnit, isWeighable, roundQuantity, unitShortLabel } from '@/utils/units';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import {
     Alert,
@@ -15,15 +17,18 @@ import {
     Modal,
     Platform,
     ScrollView,
+    Share,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
     View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function CartScreen() {
+  const insets = useSafeAreaInsets();
+  const { editWeight } = useLocalSearchParams<{ editWeight?: string }>();
   const { user } = useAuth();
   const { items, subtotal, updateQuantity, removeItem, clearCart } = useCart();
   const { customer, customerId, orderType, saleName, discount, couponId, couponCode, resetSaleData } = useSale();
@@ -70,12 +75,55 @@ export default function CartScreen() {
     const item = items.find(i => i.product_id === productId);
     if (item) {
       const newQuantity = item.quantity + delta;
-      if (newQuantity > item.product.stock) {
-        Alert.alert('Stock Insuficiente', `Solo hay ${item.product.stock} unidades disponibles`);
+      // El stock variable puede quedar en negativo (misma regla que el backend).
+      if (!canSellQuantity(item.product, newQuantity)) {
+        Alert.alert(
+          'Stock Insuficiente',
+          `Solo hay ${formatQuantityWithUnit(item.product.stock ?? 0, item.product)} disponible(s).`
+        );
         return;
       }
       updateQuantity(productId, newQuantity);
     }
+  };
+
+  // Productos pesables (kg, lb...) no se incrementan de a 1 — el cajero digita
+  // el peso que marca la balanza. `editingWeightId` controla qué fila del
+  // carrito tiene el campo de cantidad abierto para edición.
+  const [editingWeightId, setEditingWeightId] = useState<number | null>(null);
+  const [weightDraft, setWeightDraft] = useState('');
+
+  const handleStartWeightEdit = (item: CartItem) => {
+    setEditingWeightId(item.product_id);
+    setWeightDraft(item.quantity ? String(item.quantity) : '');
+  };
+
+  // Al llegar desde el POS con un pesable recién agregado (quantity: 0),
+  // abrimos el editor de peso automáticamente — equivalente móvil del
+  // teclado numérico que el web abre solo vía `pendingWeightProductId`.
+  useEffect(() => {
+    if (!editWeight) return;
+    const pending = items.find((i) => String(i.product_id) === String(editWeight));
+    if (pending) {
+      handleStartWeightEdit(pending);
+    }
+  }, [editWeight, items.length]);
+
+  const handleCommitWeightEdit = (item: CartItem) => {
+    setEditingWeightId(null);
+    const parsed = roundQuantity(parseFloat(weightDraft.replace(',', '.')) || 0);
+    if (parsed <= 0) {
+      Alert.alert('Cantidad inválida', 'Ingresa un peso mayor que cero.');
+      return;
+    }
+    if (!canSellQuantity(item.product, parsed)) {
+      Alert.alert(
+        'Stock Insuficiente',
+        `Solo hay ${formatQuantityWithUnit(item.product.stock ?? 0, item.product)} disponible(s).`
+      );
+      return;
+    }
+    updateQuantity(item.product_id, parsed);
   };
 
   const handleRemoveItem = (productId: number) => {
@@ -90,6 +138,10 @@ export default function CartScreen() {
   };
 
   const handleProcessPayment = async () => {
+    // Igual que `handlePay` del web (`Newsales.jsx:587`): evita doble envío
+    // si el usuario alcanza a tocar "Confirmar" otra vez antes del re-render.
+    if (isProcessing) return;
+
     console.log('🔄 Iniciando proceso de pago...');
     console.log('Items en carrito:', items.length);
     console.log('Método de pago:', paymentMethod);
@@ -120,11 +172,32 @@ export default function CartScreen() {
       return;
     }
 
-    if (!orderType) {
-      console.log('❌ No hay tipo de orden seleccionado');
-      setErrorMessage({ 
-        title: 'Tipo de Orden Requerido', 
-        message: 'Debes seleccionar un tipo de orden (Llevar/Entrega) antes de procesar el pago' 
+    // El tipo de orden es opcional — igual que el web (`Newsales.jsx` nunca
+    // valida `infoS.type` antes de cobrar).
+
+    // Bloquea el cobro si queda un pesable sin peso digitado (quantity: 0) —
+    // equivalente al guard de `pendingWeightProductId` en `Newsales.jsx:561-565`.
+    const sinPeso = items.find((item) => !(item.quantity > 0));
+    if (sinPeso) {
+      setErrorMessage({
+        title: 'Falta indicar la cantidad',
+        message: `Ingresa el peso/cantidad de "${sinPeso.product.name}" antes de cobrar.`,
+      });
+      setShowErrorModal(true);
+      return;
+    }
+
+    // Validar stock antes de cobrar — los productos de stock variable se
+    // omiten, igual que en el web y en el backend.
+    const sinStock = items.find((item) => !canSellQuantity(item.product, item.quantity));
+    if (sinStock) {
+      console.log('❌ Stock insuficiente para', sinStock.product.name);
+      setErrorMessage({
+        title: 'Stock Insuficiente',
+        message: `Solo hay ${formatQuantityWithUnit(
+          sinStock.product.stock ?? 0,
+          sinStock.product
+        )} disponible(s) de "${sinStock.product.name}".`,
       });
       setShowErrorModal(true);
       return;
@@ -165,25 +238,30 @@ export default function CartScreen() {
       
       const response = await posService.createSale(saleData);
       console.log('✅ Respuesta recibida:', response);
-      
+
       const sale = response;
-      
+
       setCompletedSale({
         ...sale,
         payment_method: paymentMethod,
         amount_received: paymentMethod === 'cash' ? parseFloat(amountReceived || '0') : total,
         change_amount: change,
+        // Copia de las líneas para el comprobante — el carrito se limpia al
+        // cerrar el modal de éxito, no antes (igual que `resetPos()` del web,
+        // que solo se llama al cerrar/imprimir, no al cobrar).
+        items: items.map((item) => ({
+          name: item.product.name,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          subtotal: item.subtotal,
+        })),
       });
-      
+
       console.log('✅ Venta completada, mostrando modal de éxito');
-      
-      // Limpiar el carrito después de la venta exitosa
-      clearCart();
-      resetSaleData();
-      
+
       // Actualizar el turno activo para reflejar las ventas
       await checkActiveShift();
-      
+
       setShowPaymentModal(false);
       setShowSuccessModal(true);
     } catch (error: any) {
@@ -199,41 +277,108 @@ export default function CartScreen() {
     }
   };
 
-  const renderCartItem = ({ item }: { item: CartItem }) => (
-    <View style={styles.cartItem}>
-      <View style={styles.itemInfo}>
-        <Text style={styles.itemName}>{item.product.name}</Text>
-        <Text style={styles.itemPrice}>{formatCurrency(item.unit_price)}</Text>
-      </View>
-      
-      <View style={styles.quantityContainer}>
-        <TouchableOpacity
-          style={styles.quantityButton}
-          onPress={() => handleQuantityChange(item.product_id, -1)}
-        >
-          <Ionicons name="remove" size={20} color={Colors.primary} />
-        </TouchableOpacity>
-        <Text style={styles.quantityText}>{item.quantity}</Text>
-        <TouchableOpacity
-          style={styles.quantityButton}
-          onPress={() => handleQuantityChange(item.product_id, 1)}
-        >
-          <Ionicons name="add" size={20} color={Colors.primary} />
-        </TouchableOpacity>
-      </View>
+  const handleCloseSuccessModal = () => {
+    setShowSuccessModal(false);
+    clearCart();
+    resetSaleData();
+    router.back();
+  };
 
-      <View style={styles.itemRight}>
-        <Text style={styles.itemSubtotal}>{formatCurrency(item.subtotal)}</Text>
-        <TouchableOpacity onPress={() => handleRemoveItem(item.product_id)}>
-          <Ionicons name="trash-outline" size={20} color={Colors.error} />
-        </TouchableOpacity>
+  const handleShareReceipt = async () => {
+    if (!completedSale) return;
+    const lines = [
+      `Factura: ${completedSale.invoice_number || completedSale.folio || `Venta #${completedSale.id}`}`,
+      ...(completedSale.items || []).map(
+        (i: any) => `${i.quantity} x ${i.name} — ${formatCurrency(i.subtotal)}`
+      ),
+      '',
+      `Total: ${formatCurrency(completedSale.total || completedSale.total_amount || 0)}`,
+      `Método: ${completedSale.payment_method === 'cash' ? 'Efectivo' : 'Transferencia'}`,
+    ];
+    if (completedSale.payment_method === 'cash') {
+      lines.push(`Recibido: ${formatCurrency(completedSale.amount_received)}`);
+      lines.push(`Vuelto: ${formatCurrency(completedSale.change_amount)}`);
+    }
+    try {
+      await Share.share({ message: lines.join('\n') });
+    } catch (e) {
+      // El usuario canceló el share sheet — no es un error a reportar.
+    }
+  };
+
+  const handleViewDetail = () => {
+    if (!completedSale?.id) return;
+    handleCloseSuccessModal();
+    router.push(`/sales/${completedSale.id}` as any);
+  };
+
+  const renderCartItem = ({ item }: { item: CartItem }) => {
+    const weighable = isWeighable(item.product);
+    const isEditingWeight = editingWeightId === item.product_id;
+
+    return (
+      <View style={styles.cartItem}>
+        <View style={styles.itemInfo}>
+          <Text style={styles.itemName}>{item.product.name}</Text>
+          <Text style={styles.itemPrice}>
+            {formatCurrency(item.unit_price)}
+            {weighable ? `/${unitShortLabel(item.product)}` : ''}
+          </Text>
+        </View>
+
+        {weighable ? (
+          isEditingWeight ? (
+            <TextInput
+              style={styles.weightInput}
+              value={weightDraft}
+              onChangeText={setWeightDraft}
+              onBlur={() => handleCommitWeightEdit(item)}
+              onSubmitEditing={() => handleCommitWeightEdit(item)}
+              keyboardType="decimal-pad"
+              autoFocus
+              selectTextOnFocus
+            />
+          ) : (
+            <TouchableOpacity
+              style={styles.weightDisplay}
+              onPress={() => handleStartWeightEdit(item)}
+            >
+              <Text style={styles.weightText}>{formatQuantityWithUnit(item.quantity, item.product)}</Text>
+              <Ionicons name="create-outline" size={14} color={Colors.primary} />
+            </TouchableOpacity>
+          )
+        ) : (
+          <View style={styles.quantityContainer}>
+            <TouchableOpacity
+              style={styles.quantityButton}
+              onPress={() => handleQuantityChange(item.product_id, -1)}
+            >
+              <Ionicons name="remove" size={20} color={Colors.primary} />
+            </TouchableOpacity>
+            <Text style={styles.quantityText}>{item.quantity}</Text>
+            <TouchableOpacity
+              style={styles.quantityButton}
+              onPress={() => handleQuantityChange(item.product_id, 1)}
+            >
+              <Ionicons name="add" size={20} color={Colors.primary} />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <View style={styles.itemRight}>
+          <Text style={styles.itemSubtotal}>{formatCurrency(item.subtotal)}</Text>
+          <TouchableOpacity onPress={() => handleRemoveItem(item.product_id)}>
+            <Ionicons name="trash-outline" size={20} color={Colors.error} />
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   if (isLoadingShift) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
+        <StatusBar style="dark" />
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()}>
             <Ionicons name="arrow-back" size={24} color={Colors.text} />
@@ -251,6 +396,7 @@ export default function CartScreen() {
   if (items.length === 0) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
+        <StatusBar style="dark" />
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()}>
             <Ionicons name="arrow-back" size={24} color={Colors.text} />
@@ -268,7 +414,8 @@ export default function CartScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <KeyboardAvoidingView 
+      <StatusBar style="dark" />
+      <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
@@ -291,7 +438,7 @@ export default function CartScreen() {
           keyboardShouldPersistTaps="handled"
         />
         
-        <View style={styles.summary}>
+        <View style={[styles.summary, { paddingBottom: Spacing.lg + insets.bottom }]}>
           {/* Información del turno activo */}
           {activeShift && (
             <View style={styles.shiftInfo}>
@@ -414,7 +561,11 @@ export default function CartScreen() {
                     styles.paymentMethod,
                     paymentMethod === 'transfer' && styles.paymentMethodActive,
                   ]}
-                  onPress={() => setPaymentMethod('transfer')}
+                  onPress={() => {
+                    setPaymentMethod('transfer');
+                    // Igual que el web: transferencia se paga por el valor exacto.
+                    setAmountReceived(total.toString());
+                  }}
                   activeOpacity={0.7}
                 >
                   <Ionicons
@@ -476,6 +627,13 @@ export default function CartScreen() {
                     >
                       <Text style={styles.quickAmountText}>+20k</Text>
                     </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.quickAmountButton}
+                      onPress={() => setAmountReceived((Math.ceil(total / 50000) * 50000).toString())}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.quickAmountText}>+50k</Text>
+                    </TouchableOpacity>
                   </View>
                   
                   {parseFloat(amountReceived || '0') > 0 && (
@@ -523,12 +681,7 @@ export default function CartScreen() {
         animationType="fade"
         transparent={true}
         visible={showSuccessModal}
-        onRequestClose={() => {
-          setShowSuccessModal(false);
-          clearCart();
-          resetSaleData();
-          router.back();
-        }}
+        onRequestClose={handleCloseSuccessModal}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.successModalContent}>
@@ -553,7 +706,16 @@ export default function CartScreen() {
                     {formatCurrency(completedSale.total || completedSale.total_amount || 0)}
                   </Text>
                 </View>
-                
+
+                {completedSale.total_profit !== undefined && completedSale.total_profit !== null && (
+                  <View style={styles.successRow}>
+                    <Text style={styles.successLabel}>Ganancia:</Text>
+                    <Text style={[styles.successValue, { color: Colors.success }]}>
+                      {formatCurrency(completedSale.total_profit)}
+                    </Text>
+                  </View>
+                )}
+
                 {completedSale.payment_method === 'cash' && (
                   <>
                     <View style={styles.successRow}>
@@ -582,17 +744,31 @@ export default function CartScreen() {
 
             <View style={styles.successButtons}>
               <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonCancel]}
-                onPress={() => {
-                  setShowSuccessModal(false);
-                  // Ya se limpió en handleProcessPayment
-                  router.back();
-                }}
+                style={[styles.modalButton, styles.modalButtonShare]}
+                onPress={handleShareReceipt}
                 activeOpacity={0.7}
               >
-                <Text style={styles.modalButtonCancelText}>Cerrar</Text>
+                <Ionicons name="share-outline" size={18} color={Colors.primary} />
+                <Text style={styles.modalButtonShareText}>Compartir</Text>
               </TouchableOpacity>
+              {completedSale?.id && (
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonShare]}
+                  onPress={handleViewDetail}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="receipt-outline" size={18} color={Colors.primary} />
+                  <Text style={styles.modalButtonShareText}>Ver Detalle</Text>
+                </TouchableOpacity>
+              )}
             </View>
+            <TouchableOpacity
+              style={[styles.modalButton, styles.modalButtonCancel, { marginTop: Spacing.sm }]}
+              onPress={handleCloseSuccessModal}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.modalButtonCancelText}>Cerrar (Nueva Venta)</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -631,7 +807,7 @@ export default function CartScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.white,
   },
   header: {
     flexDirection: 'row',
@@ -690,6 +866,32 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.semibold,
     color: Colors.text,
     minWidth: 32,
+    textAlign: 'center',
+  },
+  weightDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: Colors.background,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+  },
+  weightText: {
+    fontSize: FontSize.md,
+    fontWeight: FontWeight.semibold,
+    color: Colors.primary,
+  },
+  weightInput: {
+    minWidth: 70,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    fontSize: FontSize.md,
+    fontWeight: FontWeight.semibold,
+    color: Colors.text,
     textAlign: 'center',
   },
   itemRight: {
@@ -897,6 +1099,16 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md,
     fontWeight: FontWeight.semibold,
     color: Colors.white,
+  },
+  modalButtonShare: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+    backgroundColor: Colors.primaryLight + '20',
+  },
+  modalButtonShareText: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
+    color: Colors.primary,
   },
   saleInfo: {
     backgroundColor: Colors.successLight,

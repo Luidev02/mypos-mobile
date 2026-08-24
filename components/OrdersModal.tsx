@@ -10,12 +10,12 @@ import {
     FlatList,
     Modal,
     RefreshControl,
-    SafeAreaView,
     StyleSheet,
     Text,
     TouchableOpacity,
     View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface OrdersModalProps {
   visible: boolean;

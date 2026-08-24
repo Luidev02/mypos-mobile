@@ -1,6 +1,15 @@
 # MyPOS Mobile
 
-Sistema de Punto de Venta móvil desarrollado con **React Native** y **Expo Router**.
+Sistema de Punto de Venta móvil desarrollado con **React Native** (Expo SDK 54)
+y **Expo Router**. Es la versión móvil del sistema
+[JiroPOS-Frontend](../JiroPOS-Frontend) (web).
+
+## 🗂️ Estado del proyecto
+
+El trabajo de paridad con el frontend web se gestiona por fases en
+[`fases/README.md`](fases/README.md) — ahí está el tablero de control con lo
+pendiente, lo completado y las referencias exactas al código del web para
+cada módulo.
 
 ## 🚀 Características
 
@@ -10,7 +19,7 @@ Sistema de Punto de Venta móvil desarrollado con **React Native** y **Expo Rout
   - Login con email y contraseña
   - Gestión de tokens JWT
   - Almacenamiento seguro con AsyncStorage
-  - Redirección automática en errores 401/403
+  - Redirección automática en error 401 (sesión expirada)
   - Muestra información de empresa y rol
 
 - **Punto de Venta (POS)**
@@ -162,13 +171,17 @@ Contraseña: admin123
 }
 ```
 
-## 🚧 Próximas Features
+## 🚧 Pendientes
 
-- [ ] Scanner de código de barras
-- [ ] Gestión de turnos (abrir/cerrar caja)
-- [ ] Gestión de clientes
-- [ ] Aplicar descuentos y cupones
-- [ ] Compartir ticket por WhatsApp
+Ver el detalle completo, priorizado por fase, en
+[`fases/pendientes/`](fases/pendientes/). Resumen de lo más relevante:
+
+- [ ] Módulos aún en placeholder: cupones, compras, empresa, perfil, turnos
+- [ ] Productos pesables / unidades de medida (kg, lb, gal)
+- [ ] Facturación electrónica DIAN (estado, reintento, resoluciones)
+- [ ] Import / Export de Excel
+- [ ] Sistema de permisos por rol en la UI
+- [ ] Temas / paletas de color
 - [ ] Modo offline con sincronización
 - [ ] Impresión Bluetooth
 - [ ] Notificaciones push

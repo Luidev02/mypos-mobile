@@ -1,4 +1,5 @@
 import { BorderRadius, Colors, FontSize, FontWeight, Shadow, Spacing } from '@/constants/theme';
+import { usePermissions } from '@/contexts/PermissionsContext';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React from 'react';
@@ -12,7 +13,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ManagementScreen() {
-  const modules = [
+  const { can } = usePermissions();
+
+  const allModules = [
     {
       id: 'users',
       title: 'Usuarios',
@@ -20,6 +23,7 @@ export default function ManagementScreen() {
       icon: 'people',
       color: Colors.primary,
       route: '/management/users',
+      perm: 'view_users',
     },
     {
       id: 'roles',
@@ -28,8 +32,11 @@ export default function ManagementScreen() {
       icon: 'shield-checkmark',
       color: '#F59E0B',
       route: '/management/roles',
+      perm: 'view_roles',
     },
   ];
+
+  const modules = allModules.filter((m) => can(m.perm));
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -41,7 +48,7 @@ export default function ManagementScreen() {
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView style={styles.scrollBody} contentContainerStyle={styles.content}>
         <View style={styles.welcomeCard}>
           <Ionicons name="settings" size={48} color={Colors.primary} />
           <Text style={styles.welcomeTitle}>Panel de Gestión</Text>
@@ -77,7 +84,7 @@ export default function ManagementScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.primary,
   },
   header: {
     flexDirection: 'row',
@@ -91,6 +98,10 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xl,
     fontWeight: FontWeight.bold,
     color: Colors.white,
+  },
+  scrollBody: {
+    flex: 1,
+    backgroundColor: Colors.background,
   },
   content: {
     padding: Spacing.lg,

@@ -13,8 +13,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
 import { useSale } from '@/contexts/SaleContext';
 import { posService } from '@/services';
+import { companyService } from '@/services/extended';
 import type { Category, Product, Sale, Shift } from '@/types';
-import { formatCurrency, getStockColor } from '@/utils/helpers';
+import { formatCurrency } from '@/utils/helpers';
+import { canSellQuantity, formatQuantityWithUnit, hasVariableStock, isWeighable } from '@/utils/units';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
@@ -23,7 +25,6 @@ import {
     ActivityIndicator,
     Alert,
     Dimensions,
-    FlatList,
     RefreshControl,
     ScrollView,
     StyleSheet,
@@ -32,12 +33,19 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width: screenWidth } = Dimensions.get('window');
 const isTablet = screenWidth >= 768;
 
+// Mismas medidas que la web (BtnProducts.jsx): cuadros de 100px en móvil y
+// 135px en pantallas grandes, distribuidos con wrap y centrados.
+const GRID_PADDING = 8;
+const GRID_GAP = 8;
+const TILE_SIZE = isTablet ? 135 : 100;
+
 export default function POSScreen() {
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { items, totalItems, subtotal, addItem, removeItem, updateQuantity, clearCart } = useCart();
   const {
@@ -47,17 +55,30 @@ export default function POSScreen() {
     saleName,
     discount,
     couponId,
+    companyReportsDian,
+    companyDisplayName,
+    requiresElectronicInvoice,
     setCustomer,
     setOrderType,
     setSaleName,
     setDiscount,
     clearDiscount,
     resetSaleData,
+    setDefaultCustomer,
+    setCompanyInfo,
+    setEmployeeName,
   } = useSale();
+
+  // Réplica exacta de `getInvoiceType()` en Newsales.jsx.
+  const invoiceType = !companyReportsDian
+    ? { label: 'Sin Factura', icon: '📋', bg: '#F3F4F6', color: '#4B5563' }
+    : requiresElectronicInvoice
+    ? { label: 'Factura Electrónica', icon: '📄', bg: '#DBEAFE', color: '#1D4ED8' }
+    : { label: 'Factura POS', icon: '🧾', bg: '#DCFCE7', color: '#15803D' };
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -83,6 +104,32 @@ export default function POSScreen() {
     loadData();
   }, []);
 
+  // Contexto de empresa — igual que `Newsales.jsx`: resuelve el cliente por
+  // defecto real ("Consumidor Final") en vez de asumir id=1, y si la empresa
+  // reporta a la DIAN para decidir el badge de tipo de factura. El nombre de
+  // empresa/cajero ya vienen en el usuario autenticado (no hace falta
+  // refetch como en el web).
+  useEffect(() => {
+    if (user?.username) setEmployeeName(user.username);
+
+    posService
+      .getCustomers()
+      .then((customers) => {
+        const consumidorFinal = customers.find((c) => c.ident === '222222222222');
+        if (consumidorFinal) {
+          setDefaultCustomer(consumidorFinal.name, consumidorFinal.id);
+        }
+      })
+      .catch((e) => console.error('Error resolviendo cliente por defecto:', e));
+
+    companyService
+      .getCompany()
+      .then((company) => {
+        setCompanyInfo(company.trade_name || company.name || user?.company_name || '', company.report_dian === 'YES');
+      })
+      .catch((e) => console.error('Error cargando configuración de empresa:', e));
+  }, []);
+
   // Refrescar datos cuando la pantalla gana foco (después de volver del carrito)
   useFocusEffect(
     useCallback(() => {
@@ -98,7 +145,7 @@ export default function POSScreen() {
       
       // Recargar productos si hay una categoría seleccionada
       if (selectedCategory) {
-        const productsData = await posService.getProductsByCategory(selectedCategory);
+        const productsData = await posService.getCategoryProducts(selectedCategory.id);
         setProducts(productsData);
       }
     } catch (error) {
@@ -136,17 +183,13 @@ export default function POSScreen() {
         posService.getCategories(),
         posService.getActiveShift(),
       ]);
-      
+
       setCategories(categoriesData);
       setShift(activeShift);
-      
+
       // Si no hay turno activo, mostrar modal
       if (!activeShift) {
         setTimeout(() => setShowShiftModal(true), 500);
-      }
-      
-      if (categoriesData.length > 0) {
-        await handleCategorySelect(categoriesData[0]);
       }
     } catch (error: any) {
       Alert.alert('Error', 'No se pudo cargar los datos');
@@ -157,19 +200,42 @@ export default function POSScreen() {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await loadData();
-    setIsRefreshing(false);
+    try {
+      const activeShift = await posService.getActiveShift();
+      setShift(activeShift);
+
+      if (searchQuery.trim() !== '') {
+        const results = await posService.searchProducts(searchQuery);
+        setProducts(results);
+      } else if (selectedCategory) {
+        const productsData = await posService.getCategoryProducts(selectedCategory.id);
+        setProducts(productsData);
+      } else {
+        const categoriesData = await posService.getCategories();
+        setCategories(categoriesData);
+      }
+    } catch (error) {
+      // Silencioso: el pull-to-refresh no debe interrumpir con alertas
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   const handleCategorySelect = async (category: Category) => {
     try {
-      setSelectedCategory(category.id);
+      setSelectedCategory(category);
       setSearchQuery(''); // Clear search when selecting category
       const categoryProducts = await posService.getCategoryProducts(category.id);
       setProducts(categoryProducts);
     } catch (error: any) {
       Alert.alert('Error', 'No se pudieron cargar los productos');
     }
+  };
+
+  const handleGoHome = () => {
+    setSelectedCategory(null);
+    setSearchQuery('');
+    setProducts([]);
   };
 
   const handleProductPress = (product: Product) => {
@@ -186,8 +252,27 @@ export default function POSScreen() {
       return;
     }
 
-    if (product.stock <= 0) {
-      Alert.alert('Sin Stock', 'Este producto no tiene stock disponible');
+    // Los pesables no se incrementan de a 1: el cajero debe digitar el peso
+    // que marca la balanza. Se agrega en 0 y se navega al carrito, que abre
+    // el editor de peso para esa línea — equivalente móvil del teclado
+    // numérico que el web abre automáticamente (`pendingWeightProductId`).
+    if (isWeighable(product)) {
+      addItem(product, 0);
+      router.push({ pathname: '/cart', params: { editWeight: product.id } } as any);
+      return;
+    }
+
+    // El stock variable (carnicería, fruver…) puede quedar en negativo: el
+    // backend lo permite explícitamente, así que aquí tampoco se bloquea.
+    const inCart = items.find((i) => i.product_id === product.id)?.quantity ?? 0;
+    if (!canSellQuantity(product, inCart + 1)) {
+      const available = product.stock ?? 0;
+      Alert.alert(
+        'Stock insuficiente',
+        available <= 0
+          ? 'Este producto no tiene stock disponible'
+          : `Solo hay ${formatQuantityWithUnit(available, product)} disponible(s).`
+      );
       return;
     }
 
@@ -195,26 +280,48 @@ export default function POSScreen() {
   };
 
   const handleBarcodeScanned = async (barcode: string) => {
+    if (!shift) {
+      Alert.alert(
+        'Sin Turno Activo',
+        'Debe abrir un turno antes de realizar ventas',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Abrir Turno', onPress: () => setShowShiftModal(true) },
+        ]
+      );
+      return;
+    }
+
     try {
-      // Buscar producto por código de barras
-      const results = await posService.searchProducts(barcode);
-      
-      if (results.length === 0) {
-        Alert.alert('Producto No Encontrado', `No se encontró ningún producto con el código: ${barcode}`);
+      // `/api/pos/products/scan` — a diferencia de la búsqueda por texto,
+      // interpreta etiquetas de balanza (EAN-13 de peso variable) y devuelve
+      // el peso ya parseado en `quantity`.
+      const scan = await posService.scanBarcode(barcode);
+
+      if (scan.requiresWeightInput) {
+        addItem(scan.product, 0);
+        router.push({ pathname: '/cart', params: { editWeight: scan.product.id } } as any);
         return;
       }
 
-      // Si se encuentra exactamente un producto, agregarlo al carrito
-      if (results.length === 1) {
-        handleProductPress(results[0]);
-      } else {
-        // Si hay múltiples resultados, mostrarlos en la lista
-        setProducts(results);
-        setSelectedCategory(null);
-        Alert.alert('Productos Encontrados', `Se encontraron ${results.length} productos`);
+      const inCart = items.find((i) => i.product_id === scan.product.id)?.quantity ?? 0;
+      if (!canSellQuantity(scan.product, inCart + scan.quantity)) {
+        const available = scan.product.stock ?? 0;
+        Alert.alert(
+          'Stock insuficiente',
+          available <= 0
+            ? 'Este producto no tiene stock disponible'
+            : `Solo hay ${formatQuantityWithUnit(available, scan.product)} disponible(s).`
+        );
+        return;
       }
+
+      addItem(scan.product, scan.quantity);
     } catch (error: any) {
-      Alert.alert('Error', 'No se pudo buscar el producto');
+      Alert.alert(
+        'Producto No Encontrado',
+        error.response?.data?.message || `No se encontró ningún producto con el código: ${barcode}`
+      );
     }
   };
 
@@ -400,11 +507,12 @@ export default function POSScreen() {
             sku: '',
             name: `Producto #${item.product_id}`,
             price: item.price,
+            cost: 0,
+            tax_id: 0,
             stock: 999,
-            image_url: null,
-            category_id: null,
+            image_url: undefined,
+            category_id: 0,
             is_active: true,
-            is_inventory_managed: item.is_inventory_managed !== undefined ? item.is_inventory_managed : true,
           };
           addItem(basicProduct, item.quantity);
           productosAgregados++;
@@ -449,9 +557,9 @@ export default function POSScreen() {
     }
   };
 
-  const handleSelectCustomer = (name: string, id: number) => {
+  const handleSelectCustomer = (name: string, id: number, requiresElectronicInvoice?: boolean) => {
     console.log('handleSelectCustomer llamado:', name, id);
-    setCustomer(name, id);
+    setCustomer(name, id, requiresElectronicInvoice);
     console.log('Cliente actualizado');
   };
 
@@ -474,55 +582,56 @@ export default function POSScreen() {
     Alert.alert('Configuración Guardada', `Nombre: ${name}`);
   };
 
-  const filteredProducts = searchQuery.trim() === '' ? products : products;
+  // Igual que en el frontend web: una sola grilla de cuadros que muestra
+  // categorías en "Inicio" y, al entrar a una, sus productos en el mismo lugar.
+  const viewMode: 'categories' | 'products' | 'search' =
+    searchQuery.trim() !== '' ? 'search' : selectedCategory ? 'products' : 'categories';
+  const gridItems: Array<Category | Product> = viewMode === 'categories' ? categories : products;
 
-  const renderCategoryItem = ({ item }: { item: Category }) => (
-    <TouchableOpacity
-      style={[
-        styles.categoryCard,
-        selectedCategory === item.id && styles.categoryCardSelected,
-      ]}
-      onPress={() => handleCategorySelect(item)}
-    >
-      <CategoryImage 
-        categoryId={item.id}
-        style={styles.categoryImage}
-        placeholderSize={20}
-        placeholderColor={selectedCategory === item.id ? '#fff' : '#94A3B8'}
-      />
-      <Text
-        style={[
-          styles.categoryText,
-          selectedCategory === item.id && styles.categoryTextSelected,
-        ]}
+  // Tile igual al de la web (BtnProducts.jsx): cuadro con la imagen a pantalla
+  // completa y una franja blanca semitransparente abajo con el nombre.
+  const renderGridTile = (item: Category | Product) => {
+    const isCategory = viewMode === 'categories';
+    const product = isCategory ? null : (item as Product);
+    const isVariable = hasVariableStock(product);
+    // Solo se marca "sin stock" a los productos de stock fijo: los de stock
+    // variable se venden aunque queden en negativo (misma regla del backend).
+    const outOfStock = !!product && !isVariable && (product.stock ?? 0) <= 0;
+
+    return (
+      <TouchableOpacity
+        key={`${isCategory ? 'cat' : 'prod'}-${item.id}`}
+        style={[styles.tile, outOfStock && styles.tileDisabled]}
+        activeOpacity={0.75}
+        disabled={outOfStock}
+        onPress={() =>
+          isCategory ? handleCategorySelect(item as Category) : handleProductPress(product!)
+        }
       >
-        {item.name}
-      </Text>
-    </TouchableOpacity>
-  );
-
-  const renderProductItem = ({ item }: { item: Product }) => (
-    <TouchableOpacity
-      style={styles.productCard}
-      onPress={() => handleProductPress(item)}
-      disabled={item.stock <= 0}
-    >
-      <ProductImage 
-        productId={item.id}
-        style={styles.productImagePlaceholder}
-        placeholderColor="#94A3B8"
-      />
-      <View style={styles.productInfo}>
-        <Text style={styles.productName} numberOfLines={2}>
-          {item.name}
-        </Text>
-        <Text style={styles.productPrice}>{formatCurrency(item.price)}</Text>
-        <Text style={[styles.productStock, { color: getStockColor(item.stock, Colors) }]}>
-          Stock: {item.stock}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
+        {isCategory ? (
+          <CategoryImage categoryId={item.id} style={styles.tileImage} placeholderColor="#CBD5E1" />
+        ) : (
+          <ProductImage productId={item.id} style={styles.tileImage} placeholderColor="#CBD5E1" />
+        )}
+        {/* Indicador de stock variable — equivale al 🔓 de la web */}
+        {isVariable && (
+          <View style={styles.tileBadgeVariable}>
+            <Text style={styles.tileBadgeText}>🔓</Text>
+          </View>
+        )}
+        {outOfStock && (
+          <View style={styles.tileBadge}>
+            <Text style={styles.tileBadgeText}>Sin stock</Text>
+          </View>
+        )}
+        <View style={styles.tileLabel}>
+          <Text style={styles.tileLabelText} numberOfLines={1}>
+            {item.name}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   if (isLoading) {
     return (
@@ -544,133 +653,141 @@ export default function POSScreen() {
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Punto de Venta</Text>
+          {!!companyDisplayName && (
+            <Text style={styles.headerSubtitle} numberOfLines={1}>{companyDisplayName}</Text>
+          )}
+        </View>
+        <View style={[styles.invoiceBadge, { backgroundColor: invoiceType.bg }]}>
+          <Text style={[styles.invoiceBadgeText, { color: invoiceType.color }]} numberOfLines={1}>
+            {invoiceType.icon} {invoiceType.label}
+          </Text>
         </View>
       </View>
 
-      {/* Top Action Buttons - Compact */}
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={false}
-        style={styles.topActionsScroll}
-        contentContainerStyle={styles.topActions}
-      >
-        <TouchableOpacity 
-          style={[styles.actionButton, !shift && styles.actionButtonWarning]}
-          onPress={handleOpenShift}
+      {/* Barra de acciones — misma estructura que la web:
+          fila 1 = Turno / Órdenes / Tipo / Cliente, fila 2 = Cupones / Ajustes / Calculadora */}
+      <View style={styles.toolbar}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.btnRowScroll}
+          contentContainerStyle={styles.btnRow}
         >
-          <Ionicons name="time-outline" size={16} color={Colors.white} />
-          <Text style={styles.actionButtonText}>{shift ? 'Turno Activo' : 'Sin Turno'}</Text>
-        </TouchableOpacity>
+          {/* BtnShift — tarjeta con icono arriba y etiqueta abajo */}
+          <TouchableOpacity
+            style={[styles.shiftBtn, shift ? styles.shiftBtnActive : styles.shiftBtnInactive]}
+            onPress={handleOpenShift}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name="time-outline"
+              size={28}
+              color={shift ? Colors.footer : '#6B7280'}
+            />
+            <Text style={[styles.shiftBtnText, { color: shift ? Colors.footer : '#4B5563' }]}>
+              {shift ? 'Turno Activo' : 'Sin Turno'}
+            </Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={styles.actionButton}
-          onPress={() => setShowOrdersModal(true)}
-        >
-          <Ionicons name="receipt-outline" size={16} color={Colors.white} />
-          <Text style={styles.actionButtonText}>Órdenes</Text>
-        </TouchableOpacity>
+          <TouchableOpacity style={styles.btnPrimary} onPress={() => setShowOrdersModal(true)} activeOpacity={0.8}>
+            <Text style={styles.btnPrimaryText}>Órdenes</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={styles.actionButton}
-          onPress={() => setShowOrderTypeModal(true)}
-        >
-          <Ionicons name="document-text-outline" size={16} color={Colors.white} />
-          <Text style={styles.actionButtonText}>{orderType}</Text>
-        </TouchableOpacity>
+          <TouchableOpacity style={styles.btnPrimary} onPress={() => setShowOrderTypeModal(true)} activeOpacity={0.8}>
+            <Text style={styles.btnPrimaryText} numberOfLines={1}>{orderType || 'Tipo de orden'}</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={styles.actionButton}
-          onPress={() => {
-            console.log('Botón cliente presionado');
-            setShowCustomerModal(true);
-          }}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="person-outline" size={16} color={Colors.white} />
-          <Text style={styles.actionButtonText} numberOfLines={1}>{customer}</Text>
-        </TouchableOpacity>
-      </ScrollView>
+          <TouchableOpacity style={styles.btnPrimary} onPress={() => setShowCustomerModal(true)} activeOpacity={0.8}>
+            <Text style={styles.btnPrimaryText} numberOfLines={1}>{customer || 'Cliente'}</Text>
+          </TouchableOpacity>
+        </ScrollView>
 
-      {/* Quick Actions Row */}
-      <View style={styles.quickActions}>
-        <TouchableOpacity 
-          style={styles.quickActionButton}
-          onPress={() => setShowCouponModal(true)}
-        >
-          <Ionicons name="pricetag-outline" size={18} color={Colors.primary} />
-          <Text style={styles.quickActionText}>Cupones</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.quickActionButton}
-          onPress={() => setShowSettingsModal(true)}
-        >
-          <Ionicons name="settings-outline" size={18} color={Colors.primary} />
-          <Text style={styles.quickActionText}>Ajustes</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.quickActionButton}
-          onPress={() => setShowCalculatorModal(true)}
-        >
-          <Ionicons name="calculator-outline" size={18} color={Colors.primary} />
-          <Text style={styles.quickActionText}>Calculadora</Text>
-        </TouchableOpacity>
+        <View style={styles.btnRowSecondary}>
+          <TouchableOpacity style={styles.btnSecondary} onPress={() => setShowCouponModal(true)} activeOpacity={0.8}>
+            <Text style={styles.btnSecondaryText}>
+              {discount > 0 ? `Cupón ${discount}%` : 'Cupones'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.btnSecondary} onPress={() => setShowSettingsModal(true)} activeOpacity={0.8}>
+            <Text style={styles.btnSecondaryText}>Ajustes</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.btnSecondary} onPress={() => setShowCalculatorModal(true)} activeOpacity={0.8}>
+            <Text style={styles.btnSecondaryText}>Calculadora</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Buscador */}
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={18} color={Colors.textLight} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Buscar producto..."
+            placeholderTextColor={Colors.textLight}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            returnKeyType="search"
+          />
+          {isSearching ? (
+            <ActivityIndicator size="small" color={Colors.primary} />
+          ) : searchQuery.length > 0 ? (
+            <TouchableOpacity style={styles.iconButton} onPress={handleGoHome}>
+              <Ionicons name="close-circle" size={20} color={Colors.textLight} />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity style={styles.iconButton} onPress={() => setShowBarcodeScanner(true)}>
+              <Ionicons name="scan-outline" size={22} color={Colors.primary} />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
-      {/* Search */}
-      <View style={styles.searchContainer}>
-        <Ionicons name="search" size={20} color={Colors.textLight} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Buscar producto..."
-          placeholderTextColor={Colors.textLight}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-        {isSearching && <ActivityIndicator size="small" color={Colors.primary} style={styles.iconButton} />}
-        {!isSearching && (
-          <>
-            <TouchableOpacity style={styles.iconButton} onPress={() => setShowBarcodeScanner(true)}>
-              <Ionicons name="barcode-outline" size={24} color={Colors.primary} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.iconButton} onPress={() => setShowBarcodeScanner(true)}>
-              <Ionicons name="qr-code-outline" size={24} color={Colors.primary} />
-            </TouchableOpacity>
-          </>
+      {/* Breadcrumb — igual que "Inicio - Categoría" / "Inicio - Búsqueda" en la web */}
+      <View style={styles.breadcrumb}>
+        <TouchableOpacity
+          onPress={handleGoHome}
+          disabled={viewMode === 'categories'}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Text style={styles.breadcrumbHome}>Inicio</Text>
+        </TouchableOpacity>
+        {viewMode === 'search' && (
+          <Text style={styles.breadcrumbCurrent} numberOfLines={1}>
+            {' - '}Búsqueda: "{searchQuery}"
+          </Text>
+        )}
+        {viewMode === 'products' && selectedCategory && (
+          <Text style={styles.breadcrumbCurrent} numberOfLines={1}>
+            {' - '}{selectedCategory.name}
+          </Text>
         )}
       </View>
 
-      {/* Categories */}
-      <FlatList
-        horizontal
-        data={categories}
-        renderItem={renderCategoryItem}
-        keyExtractor={(item) => item.id.toString()}
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.categoriesList}
-        style={styles.categoriesContainer}
-      />
-
-      {/* Products Grid */}
-      <FlatList
-        data={filteredProducts}
-        renderItem={renderProductItem}
-        keyExtractor={(item) => item.id.toString()}
-        numColumns={isTablet ? 3 : 2}
-        key={isTablet ? 'tablet' : 'mobile'}
-        contentContainerStyle={styles.productsList}
+      {/* Grilla única de categorías/productos — misma forma que en la web */}
+      <ScrollView
+        style={styles.gridScroll}
+        contentContainerStyle={styles.gridContent}
         refreshControl={
           <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
         }
-        ListEmptyComponent={
+      >
+        {gridItems.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="basket-outline" size={64} color={Colors.textLight} />
-            <Text style={styles.emptyText}>No hay productos disponibles</Text>
+            <Text style={styles.emptyText}>
+              {viewMode === 'search'
+                ? 'No se encontraron productos'
+                : viewMode === 'products'
+                ? 'No hay productos en esta categoría'
+                : 'No hay categorías disponibles'}
+            </Text>
           </View>
-        }
-      />
+        ) : (
+          gridItems.map((item) => renderGridTile(item))
+        )}
+      </ScrollView>
 
       {/* Action Buttons Bar */}
-      <View style={styles.actionBar}>
+      <View style={[styles.actionBar, { paddingBottom: Spacing.md + insets.bottom }]}>
         <View style={styles.actionBarSummary}>
           <View style={styles.itemsCount}>
             <Ionicons name="cart-outline" size={20} color={Colors.text} />
@@ -789,7 +906,7 @@ export default function POSScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.primary,
   },
   loadingContainer: {
     flex: 1,
@@ -814,163 +931,223 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.bold,
     color: Colors.white,
   },
-  topActionsScroll: {
-    backgroundColor: Colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  topActions: {
-    flexDirection: 'row',
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.sm,
-    gap: Spacing.sm,
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.primary,
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    borderRadius: BorderRadius.md,
-    gap: Spacing.xs,
-  },
-  actionButtonWarning: {
-    backgroundColor: Colors.warning,
-  },
-  actionButtonText: {
+  headerSubtitle: {
+    fontSize: FontSize.xs,
     color: Colors.white,
+    opacity: 0.8,
+    marginTop: 2,
+  },
+  invoiceBadge: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.full,
+    maxWidth: 150,
+  },
+  invoiceBadgeText: {
     fontSize: FontSize.xs,
     fontWeight: FontWeight.semibold,
   },
-  quickActions: {
-    flexDirection: 'row',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
+  // ─── Barra de herramientas ────────────────────────────────────────────────
+  // ─── Barra de acciones (equivalente a la barra superior de la web) ────────
+  toolbar: {
     backgroundColor: Colors.white,
-    gap: Spacing.sm,
+    paddingBottom: Spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  quickActionButton: {
-    flex: 1,
+  btnRowScroll: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  btnRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.background,
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.xs,
-    borderRadius: BorderRadius.md,
-    gap: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.sm,
+    gap: Spacing.sm,
   },
-  quickActionText: {
-    fontSize: FontSize.xs,
-    color: Colors.text,
+  // BtnShift: h-[65px] w-[100px] border-2 rounded-lg, icono + etiqueta
+  shiftBtn: {
+    height: 65,
+    width: 100,
+    borderWidth: 2,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  shiftBtnActive: {
+    backgroundColor: '#EDE4DD', // brand-surface
+    borderColor: Colors.footer, // brand
+  },
+  shiftBtnInactive: {
+    backgroundColor: '#F3F4F6', // gray-100
+    borderColor: '#9CA3AF', // gray-400
+  },
+  shiftBtnText: {
+    fontSize: 11,
+    fontWeight: FontWeight.medium,
+  },
+  // Botones marrones: bg-brand-dark text-white py-2 px-10 rounded-lg
+  btnPrimary: {
+    height: 65,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.xl,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.primary,
+    maxWidth: 200,
+  },
+  btnPrimaryText: {
+    color: Colors.white,
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.medium,
+  },
+  // Fila 2: bg-[#E5E7EB] text-black py-3 px-5 rounded-lg
+  btnRowSecondary: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.md,
+    paddingBottom: Spacing.sm,
+    gap: Spacing.sm,
+  },
+  btnSecondary: {
+    flex: 1,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    backgroundColor: '#E5E7EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnSecondaryText: {
+    color: '#000000',
+    fontSize: FontSize.sm,
     fontWeight: FontWeight.medium,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.white,
+    height: 50,
     marginHorizontal: Spacing.md,
-    marginVertical: Spacing.sm,
     paddingHorizontal: Spacing.md,
+    backgroundColor: Colors.white,
     borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    borderWidth: 2,
+    borderColor: '#D4C4B0', // border-[#D4C4B0] de la web
   },
   searchInput: {
     flex: 1,
-    height: 44,
+    height: '100%',
     marginLeft: Spacing.sm,
     fontSize: FontSize.md,
-    color: Colors.text,
+    color: '#3d2713',
   },
   iconButton: {
-    padding: Spacing.xs,
-    marginLeft: Spacing.xs,
+    paddingLeft: Spacing.sm,
   },
-  categoriesContainer: {
-    backgroundColor: Colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  categoriesList: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    gap: Spacing.sm,
-  },
-  categoryCard: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.md,
-    backgroundColor: Colors.background,
-    marginRight: Spacing.sm,
-    minWidth: 100,
+
+  // ─── Breadcrumb: "Inicio - Categoría" en gris, igual que la web ───────────
+  breadcrumb: {
+    flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  categoryCardSelected: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  categoryImage: {
-    width: 32,
-    height: 32,
-    borderRadius: BorderRadius.sm,
-    marginBottom: Spacing.xs,
-  },
-  categoryText: {
-    fontSize: FontSize.sm,
-    fontWeight: FontWeight.semibold,
-    color: Colors.text,
-  },
-  categoryTextSelected: {
-    color: Colors.white,
-  },
-  productsList: {
-    padding: Spacing.sm,
-    paddingBottom: Spacing.md,
-  },
-  productCard: {
-    flex: 1,
-    backgroundColor: Colors.white,
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    margin: Spacing.xs,
-    minWidth: isTablet ? 150 : 160,
-    maxWidth: isTablet ? 200 : 180,
-    ...Shadow.sm,
-  },
-  productImagePlaceholder: {
-    width: '100%',
-    height: isTablet ? 100 : 80,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.xs,
     backgroundColor: Colors.background,
+  },
+  breadcrumbHome: {
+    fontSize: FontSize.md,
+    fontWeight: FontWeight.medium,
+    color: '#8A8A8A',
+  },
+  breadcrumbCurrent: {
+    flexShrink: 1,
+    fontSize: FontSize.md,
+    fontWeight: FontWeight.medium,
+    color: '#6B4423',
+  },
+
+  // ─── Grilla: tiles cuadrados con etiqueta superpuesta (BtnProducts.jsx) ───
+  gridScroll: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  gridContent: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignContent: 'flex-start',
+    gap: GRID_GAP,
+    paddingHorizontal: GRID_PADDING,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.lg,
+  },
+  tile: {
+    width: TILE_SIZE,
+    height: TILE_SIZE,
+    borderWidth: 2,
+    borderColor: '#E5E7EB', // border-gray-200
     borderRadius: BorderRadius.md,
+    overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: Colors.white,
+  },
+  tileDisabled: {
+    opacity: 0.55,
+  },
+  tileImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+  },
+  tileLabel: {
+    position: 'absolute',
+    bottom: 4,
+    left: 0,
+    right: 0,
+    height: 35,
+    backgroundColor: 'rgba(255,255,255,0.8)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.sm,
+    paddingHorizontal: 4,
   },
-  productInfo: {
-    gap: Spacing.xs,
-  },
-  productName: {
-    fontSize: FontSize.sm,
-    fontWeight: FontWeight.medium,
-    color: Colors.text,
-    minHeight: 36,
-  },
-  productPrice: {
-    fontSize: FontSize.md,
-    fontWeight: FontWeight.bold,
-    color: Colors.primary,
-  },
-  productStock: {
+  tileLabelText: {
     fontSize: FontSize.xs,
-    fontWeight: FontWeight.medium,
+    color: '#111827', // text-gray-900
+    textAlign: 'center',
+  },
+  tileBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    zIndex: 10,
+    backgroundColor: Colors.error,
+    borderRadius: BorderRadius.sm,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
+  // Stock variable: mismo lugar que el 🔓 de la web (arriba a la derecha)
+  tileBadgeVariable: {
+    position: 'absolute',
+    top: 4,
+    left: 4,
+    zIndex: 10,
+    backgroundColor: '#FBBF24', // amber-400, igual que la web
+    borderRadius: BorderRadius.sm,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
+  tileBadgeText: {
+    fontSize: 9,
+    fontWeight: FontWeight.bold,
+    color: Colors.white,
   },
   emptyContainer: {
-    flex: 1,
+    width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
     paddingTop: Spacing.xxl * 2,

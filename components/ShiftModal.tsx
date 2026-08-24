@@ -8,7 +8,6 @@ import {
     ActivityIndicator,
     Alert,
     Modal,
-    SafeAreaView,
     ScrollView,
     StyleSheet,
     Text,
@@ -16,6 +15,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface ShiftModalProps {
   visible: boolean;
@@ -415,6 +415,9 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   registerScroll: {
+    flexGrow: 0,
+    flexShrink: 0,
+    height: 108,
     marginHorizontal: -Spacing.xs,
   },
   registerCard: {

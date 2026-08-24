@@ -6,8 +6,9 @@ import { ProductImage } from '@/components/ProductImage';
 import { SearchBar } from '@/components/SearchBar';
 import { Colors, FontSize, FontWeight, Spacing } from '@/constants/theme';
 import { useToast } from '@/contexts/ToastContext';
+import { isWeighable, unitShortLabel } from '@/utils/units';
 import { categoryService, extendedProductService, taxService } from '@/services/extended';
-import { Category, ProductDetailed, Tax } from '@/types';
+import { Category, MeasurementUnit, ProductDetailed, Tax } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -27,6 +28,7 @@ export default function ProductsScreen() {
   const [products, setProducts] = useState<ProductDetailed[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [taxes, setTaxes] = useState<Tax[]>([]);
+  const [units, setUnits] = useState<MeasurementUnit[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -43,14 +45,16 @@ export default function ProductsScreen() {
   const loadData = async () => {
     try {
       setError(null);
-      const [productsData, categoriesData, taxesData] = await Promise.all([
+      const [productsData, categoriesData, taxesData, unitsData] = await Promise.all([
         extendedProductService.getProducts(),
         categoryService.getCategories(),
         taxService.getTaxes(),
+        extendedProductService.getMeasurementUnits(),
       ]);
       setProducts(productsData);
       setCategories(categoriesData);
       setTaxes(taxesData);
+      setUnits(unitsData);
     } catch (err: any) {
       setError(err.message || 'Error al cargar productos');
       toast.error('Error al cargar productos');
@@ -95,16 +99,18 @@ export default function ProductsScreen() {
 
   const handleSubmit = async (data: any) => {
     try {
+      // El backend solo confirma con { id, ...datos enviados } — no el
+      // producto completo (sin stock, category_name, tax_name...) — así que
+      // hay que recargar la lista en vez de insertar la respuesta cruda.
       if (selectedProduct) {
-        const updated = await extendedProductService.updateProduct(selectedProduct.id, data);
-        setProducts(products.map((p) => (p.id === updated.id ? updated : p)));
+        await extendedProductService.updateProduct(selectedProduct.id, data);
         toast.success('Producto actualizado');
       } else {
-        const created = await extendedProductService.createProduct(data);
-        setProducts([created, ...products]);
+        await extendedProductService.createProduct(data);
         toast.success('Producto creado');
       }
       setShowFormModal(false);
+      loadData();
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Error al guardar producto');
       throw err;
@@ -124,24 +130,29 @@ export default function ProductsScreen() {
 
   const renderProduct = ({ item }: { item: ProductDetailed }) => {
     const productName = item.name || item.title || 'Sin nombre';
-    
+    const weighable = isWeighable(item);
+    const unitLabel = weighable ? unitShortLabel(item) : '';
+
     return (
       <TouchableOpacity style={styles.productCard} onPress={() => handleEdit(item)}>
-        <ProductImage 
-          productId={item.id} 
+        <ProductImage
+          productId={item.id}
           style={styles.productImage}
           placeholderColor={Colors.textSecondary}
           placeholderSize={32}
         />
-        
+
         <View style={styles.productInfo}>
           <Text style={styles.productName}>{productName}</Text>
           <Text style={styles.productSku}>SKU: {item.sku || 'N/A'}</Text>
           <View style={styles.productMeta}>
-            <Text style={styles.productPrice}>${Number(item.price || 0).toFixed(2)}</Text>
+            <Text style={styles.productPrice}>
+              ${Number(item.price || 0).toFixed(2)}
+              {weighable ? `/${unitLabel}` : ''}
+            </Text>
             <View style={[styles.stockBadge, Number(item.stock || 0) < Number(item.stock_alert || 0) && styles.stockBadgeLow]}>
               <Text style={[styles.stockText, Number(item.stock || 0) < Number(item.stock_alert || 0) && styles.stockTextLow]}>
-                Stock: {Number(item.stock || 0)}
+                Stock: {Number(item.stock || 0)}{weighable ? ` ${unitLabel}` : ''}
               </Text>
             </View>
           </View>
@@ -203,6 +214,7 @@ export default function ProductsScreen() {
           data={filteredProducts}
           renderItem={renderProduct}
           keyExtractor={(item, index) => `product-${item.id}-${index}`}
+          style={styles.listBody}
           contentContainerStyle={styles.list}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
         />
@@ -213,6 +225,7 @@ export default function ProductsScreen() {
         product={selectedProduct}
         categories={categories}
         taxes={taxes}
+        units={units}
         onClose={() => setShowFormModal(false)}
         onSubmit={handleSubmit}
       />
@@ -233,7 +246,7 @@ export default function ProductsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.primary,
   },
   centerContainer: {
     flex: 1,
@@ -268,6 +281,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
+  },
+  listBody: {
+    flex: 1,
+    backgroundColor: Colors.background,
   },
   list: {
     padding: 16,

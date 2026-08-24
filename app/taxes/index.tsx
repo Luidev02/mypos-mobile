@@ -89,7 +89,10 @@ export default function TaxesScreen() {
   const handleSubmit = async (data: CreateTaxRequest | UpdateTaxRequest) => {
     try {
       if (selectedTax) {
-        const updated = await taxService.updateTax(selectedTax.id, data);
+        const updated = await taxService.updateTax(selectedTax.id, {
+          ...data,
+          id: selectedTax.id,
+        });
         setTaxes(taxes.map((t) => (t.id === updated.id ? updated : t)));
         toast.success('Impuesto actualizado');
       } else {
@@ -174,6 +177,7 @@ export default function TaxesScreen() {
           data={filteredTaxes}
           renderItem={renderTax}
           keyExtractor={(item) => item.id.toString()}
+          style={styles.listBody}
           contentContainerStyle={styles.list}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
         />
@@ -208,6 +212,7 @@ const TaxFormModal: React.FC<{
   const [formData, setFormData] = useState({
     name: tax?.name || '',
     rate: tax?.rate?.toString() || '',
+    type: tax?.type || 'IVA',
   });
   const [loading, setLoading] = useState(false);
 
@@ -219,6 +224,7 @@ const TaxFormModal: React.FC<{
       await onSubmit({
         name: formData.name.trim(),
         rate: parseFloat(formData.rate),
+        type: formData.type,
       });
     } finally {
       setLoading(false);
@@ -230,9 +236,10 @@ const TaxFormModal: React.FC<{
       setFormData({
         name: tax.name,
         rate: tax.rate.toString(),
+        type: tax.type || 'IVA',
       });
     } else if (!visible) {
-      setFormData({ name: '', rate: '' });
+      setFormData({ name: '', rate: '', type: 'IVA' });
     }
   }, [visible, tax]);
 
@@ -271,6 +278,23 @@ const TaxFormModal: React.FC<{
             />
           </View>
 
+          <View style={styles.field}>
+            <Text style={styles.label}>Tipo</Text>
+            <View style={styles.typeOptions}>
+              {(['IVA', 'INC', 'EXENTO'] as const).map((type) => (
+                <TouchableOpacity
+                  key={type}
+                  style={[styles.typeOption, formData.type === type && styles.typeOptionActive]}
+                  onPress={() => setFormData({ ...formData, type })}
+                >
+                  <Text style={[styles.typeOptionText, formData.type === type && styles.typeOptionTextActive]}>
+                    {type === 'EXENTO' ? 'Exento' : type === 'INC' ? 'INC (Impoconsumo)' : 'IVA'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
           <View style={styles.infoBox}>
             <Ionicons name="information-circle-outline" size={20} color={Colors.primary} />
             <Text style={styles.infoText}>
@@ -300,7 +324,7 @@ const TaxFormModal: React.FC<{
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.primary,
   },
   centerContainer: {
     flex: 1,
@@ -335,6 +359,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
+  },
+  listBody: {
+    flex: 1,
+    backgroundColor: Colors.background,
   },
   list: {
     padding: 16,
@@ -419,6 +447,31 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 16,
     color: Colors.text,
+  },
+  typeOptions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  typeOption: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+  },
+  typeOptionActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  typeOptionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  typeOptionTextActive: {
+    color: Colors.white,
   },
   infoBox: {
     flexDirection: 'row',

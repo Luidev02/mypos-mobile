@@ -1,7 +1,9 @@
 import { BorderRadius, Colors, FontSize, FontWeight, Shadow, Spacing } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePermissions } from '@/contexts/PermissionsContext';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import React from 'react';
 import {
     Alert,
@@ -15,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function MoreScreen() {
   const { user, logout } = useAuth();
+  const { can } = usePermissions();
 
   const handleLogout = () => {
     Alert.alert(
@@ -34,7 +37,7 @@ export default function MoreScreen() {
     );
   };
 
-  const menuItems = [
+  const allMenuItems = [
     {
       icon: 'apps-outline',
       title: 'Hub Principal',
@@ -45,67 +48,105 @@ export default function MoreScreen() {
       icon: 'person-outline',
       title: 'Mi Perfil',
       subtitle: 'Ver y editar información personal',
-      onPress: () => router.push('/profile/index'),
+      onPress: () => router.push('/profile'),
     },
     {
       icon: 'shield-checkmark-outline',
       title: 'Gestión',
       subtitle: 'Usuarios, roles y permisos',
       onPress: () => router.push('/management'),
+      perm: 'view_users',
     },
     {
       icon: 'grid-outline',
       title: 'Categorías',
       subtitle: 'Gestionar categorías de productos',
       onPress: () => router.push('/categories'),
+      perm: 'view_categories',
     },
     {
       icon: 'pricetag-outline',
       title: 'Productos',
       subtitle: 'Catálogo de productos',
       onPress: () => router.push('/products'),
+      perm: 'view_products',
     },
     {
       icon: 'people-outline',
       title: 'Clientes',
       subtitle: 'Directorio de clientes',
       onPress: () => router.push('/customers'),
+      perm: 'view_customers',
     },
     {
       icon: 'receipt-outline',
       title: 'Ventas',
       subtitle: 'Historial de ventas',
       onPress: () => router.push('/sales'),
+      perm: 'view_sales',
     },
     {
       icon: 'business-outline',
       title: 'Bodegas',
       subtitle: 'Gestionar almacenes',
-      onPress: () => router.push('/warehouses/index'),
+      onPress: () => router.push('/warehouses'),
+      perm: 'view_warehouses',
     },
     {
       icon: 'calculator-outline',
       title: 'Impuestos',
       subtitle: 'Configuración de impuestos',
       onPress: () => router.push('/taxes'),
+      perm: 'view_taxes',
     },
     {
       icon: 'gift-outline',
       title: 'Cupones',
       subtitle: 'Códigos promocionales',
       onPress: () => router.push('/coupons'),
+      perm: 'view_coupons',
+    },
+    {
+      icon: 'sync-outline',
+      title: 'Turnos',
+      subtitle: 'Historial de turnos de caja',
+      onPress: () => router.push('/shifts'),
+      perm: 'view_shifts',
+    },
+    {
+      icon: 'cash-outline',
+      title: 'Cajas Registradoras',
+      subtitle: 'Gestionar puntos de venta físicos',
+      onPress: () => router.push('/cash-registers' as any),
+      perm: 'view_pos',
     },
     {
       icon: 'bag-handle-outline',
       title: 'Compras',
       subtitle: 'Registro de compras',
-      onPress: () => router.push('/purchases/index'),
+      onPress: () => router.push('/purchases'),
+      perm: 'view_purchases',
     },
     {
       icon: 'settings-outline',
       title: 'Configuración de Empresa',
       subtitle: 'Ajustes y configuración',
       onPress: () => router.push('/company'),
+      perm: 'view_settings',
+    },
+    {
+      icon: 'cloud-upload-outline',
+      title: 'Importar/Exportar',
+      subtitle: 'Carga y descarga masiva en Excel',
+      onPress: () => router.push('/import-export' as any),
+      perm: 'view_products',
+    },
+    {
+      icon: 'sparkles-outline',
+      title: 'Asistente IA',
+      subtitle: 'Consulta ventas, inventario y más por chat',
+      onPress: () => router.push('/ai-chat' as any),
+      perm: 'view_settings',
     },
     {
       icon: 'information-circle-outline',
@@ -115,11 +156,14 @@ export default function MoreScreen() {
     },
   ];
 
+  const menuItems = allMenuItems.filter((item) => !item.perm || can(item.perm));
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar style="dark" />
       <View style={styles.header}>
         <TouchableOpacity 
-          onPress={() => router.replace('/(tabs)/')}
+          onPress={() => router.replace('/(tabs)')}
           style={styles.backButton}
         >
           <Ionicons name="arrow-back" size={24} color={Colors.text} />
@@ -176,7 +220,7 @@ export default function MoreScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.white,
   },
   header: {
     padding: Spacing.lg,

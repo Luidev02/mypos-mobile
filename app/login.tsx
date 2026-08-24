@@ -2,6 +2,7 @@ import { BorderRadius, Colors, FontSize, FontWeight, Shadow, Spacing } from '@/c
 import { useAuth } from '@/contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
@@ -15,6 +16,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function LoginScreen() {
   const { login, isAuthenticated, isLoading: authLoading } = useAuth();
@@ -26,7 +28,7 @@ export default function LoginScreen() {
   // Redirigir al hub si ya está autenticado
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      router.replace('/(tabs)/');
+      router.replace('/(tabs)');
     }
   }, [isAuthenticated, authLoading]);
 
@@ -39,7 +41,7 @@ export default function LoginScreen() {
     setIsLoading(true);
     try {
       await login(username.trim(), password);
-      router.replace('/(tabs)/');
+      router.replace('/(tabs)');
     } catch (error: any) {
       Alert.alert(
         'Error de Autenticación',
@@ -53,18 +55,21 @@ export default function LoginScreen() {
   // Mostrar loading mientras verifica la sesión
   if (authLoading) {
     return (
-      <View style={[styles.container, styles.loadingContainer]}>
+      <SafeAreaView style={[styles.container, styles.loadingContainer]}>
+        <StatusBar style="dark" />
         <ActivityIndicator size="large" color={Colors.primary} />
         <Text style={styles.loadingText}>Verificando sesión...</Text>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
+    <SafeAreaView style={styles.container}>
+      <StatusBar style="dark" />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+      >
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
@@ -136,7 +141,8 @@ export default function LoginScreen() {
           </View>
         </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 

@@ -1,9 +1,17 @@
 import { API_CONFIG } from '@/constants/api';
 import type { User } from '@/types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { secureStorage } from './device';
+
+const REFRESH_TOKEN_KEY = 'mypos_refresh_token';
 
 class StorageService {
   // Token management
+  //
+  // El ACCESS token sigue en AsyncStorage: se lee en cada petición y dura 15
+  // minutos, así que el costo de una lectura nativa cifrada por request no se
+  // justifica. El REFRESH token sí va cifrado (SecureStore): dura 30 días y
+  // con él se emiten access tokens nuevos, así que es la credencial valiosa.
   async saveToken(token: string): Promise<void> {
     await AsyncStorage.setItem(API_CONFIG.TOKEN_KEY, token);
   }
@@ -14,6 +22,18 @@ class StorageService {
 
   async removeToken(): Promise<void> {
     await AsyncStorage.removeItem(API_CONFIG.TOKEN_KEY);
+  }
+
+  async saveRefreshToken(token: string): Promise<void> {
+    await secureStorage.set(REFRESH_TOKEN_KEY, token);
+  }
+
+  async getRefreshToken(): Promise<string | null> {
+    return secureStorage.get(REFRESH_TOKEN_KEY);
+  }
+
+  async removeRefreshToken(): Promise<void> {
+    await secureStorage.remove(REFRESH_TOKEN_KEY);
   }
 
   // User info management
@@ -34,6 +54,7 @@ class StorageService {
   async clearAuth(): Promise<void> {
     await Promise.all([
       this.removeToken(),
+      this.removeRefreshToken(),
       this.removeUserInfo(),
     ]);
   }

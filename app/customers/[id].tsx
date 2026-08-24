@@ -1,64 +1,79 @@
 import { ErrorState } from '@/components/ErrorState';
 import { LoadingState } from '@/components/LoadingState';
 import { ConfirmModal } from '@/components/ConfirmModal';
+import { MunicipalityAutocomplete } from '@/components/MunicipalityAutocomplete';
 import { BorderRadius, Colors, FontSize, FontWeight, Shadow, Spacing } from '@/constants/theme';
+import { useToast } from '@/contexts/ToastContext';
 import { posService } from '@/services';
-import type { Customer } from '@/types';
+import type { Customer, CustomerIdentType, Municipality } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { 
-  Alert, 
-  ScrollView, 
-  StyleSheet, 
-  Text, 
-  TouchableOpacity, 
-  View,
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useState } from 'react';
+import {
+  ActivityIndicator,
   Linking,
   Modal,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
   TextInput,
-  Platform,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+const ID_TYPES: { value: CustomerIdentType; label: string }[] = [
+  { value: 'CC', label: 'CC' },
+  { value: 'NIT', label: 'NIT' },
+  { value: 'CE', label: 'CE' },
+  { value: 'PASAPORTE', label: 'Pasaporte' },
+];
+
 export default function CustomerDetailScreen() {
   const { id } = useLocalSearchParams();
+  const toast = useToast();
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     identification: '',
-    identificationType: 'CC' as 'CC' | 'NIT' | 'CE' | 'TI',
+    identificationType: 'CC' as CustomerIdentType,
+    dv: '',
     phone: '',
     email: '',
     address: '',
-    city: '',
+    municipalityId: undefined as number | undefined,
+    municipalityLabel: '',
+    requiresElectronicInvoice: false,
+    isActive: true,
   });
 
-  useEffect(() => {
-    loadCustomer();
-  }, [id]);
-
-  const loadCustomer = async () => {
+  const loadCustomer = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
       const data = await posService.getCustomer(Number(id));
-      console.log('Customer data:', data);
       setCustomer(data);
-      
-      // Inicializar formulario con datos del cliente
       setFormData({
         name: data.name || '',
         identification: data.ident || '',
         identificationType: data.ident_type || 'CC',
+        dv: data.dv || '',
         phone: data.phone || '',
         email: data.email || '',
         address: data.address || '',
-        city: data.city || '',
+        municipalityId: data.municipality_id,
+        municipalityLabel: data.municipality_id && data.municipality_name
+          ? `${data.municipality_name}${data.municipality_department ? ` — ${data.municipality_department}` : ''}`
+          : '',
+        requiresElectronicInvoice: !!data.requires_electronic_invoice,
+        isActive: data.status !== 'disable',
       });
     } catch (error: any) {
       console.error('Error loading customer:', error);
@@ -66,59 +81,67 @@ export default function CustomerDetailScreen() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [id]);
 
-  const handleEdit = () => {
-    setShowEditModal(true);
+  useFocusEffect(
+    useCallback(() => {
+      loadCustomer();
+    }, [loadCustomer])
+  );
+
+  const handleSelectMunicipality = (m: Municipality) => {
+    setFormData((prev) => ({ ...prev, municipalityId: m.id }));
   };
 
   const handleSaveEdit = async () => {
     if (!formData.name.trim() || !formData.identification.trim()) {
-      Alert.alert('Error', 'Nombre y DNI/NIT son obligatorios');
+      toast.error('Nombre y DNI/NIT son obligatorios');
       return;
     }
 
     try {
+      setIsSaving(true);
       await posService.updateCustomer(Number(id), {
-        name: formData.name,
-        ident: formData.identification,
+        name: formData.name.trim(),
+        ident: formData.identification.trim(),
         ident_type: formData.identificationType,
-        phone: formData.phone,
-        email: formData.email,
-        address: formData.address,
-        city: formData.city,
+        dv: formData.identificationType === 'NIT' ? formData.dv.trim() || undefined : undefined,
+        phone: formData.phone.trim() || undefined,
+        email: formData.email.trim() || undefined,
+        address: formData.address.trim() || undefined,
+        municipality_id: formData.municipalityId ?? null,
+        requires_electronic_invoice: formData.requiresElectronicInvoice,
+        status: formData.isActive ? 'active' : 'disable',
       });
-      Alert.alert('Éxito', 'Cliente actualizado correctamente');
+      toast.success('Cliente actualizado correctamente');
       setShowEditModal(false);
       loadCustomer();
     } catch (error: any) {
       console.error('Error updating customer:', error);
-      Alert.alert('Error', error.message || 'No se pudo actualizar el cliente');
+      toast.error(error.response?.data?.message || 'No se pudo actualizar el cliente');
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const handleDelete = async () => {
     try {
       await posService.deleteCustomer(Number(id));
-      Alert.alert('Éxito', 'Cliente eliminado correctamente', [
-        { text: 'OK', onPress: () => router.back() }
-      ]);
+      toast.success('Cliente eliminado correctamente');
+      router.back();
     } catch (error: any) {
       console.error('Error deleting customer:', error);
-      Alert.alert('Error', error.message || 'No se pudo eliminar el cliente');
+      setShowDeleteModal(false);
+      toast.error('Error eliminando cliente. Puede tener ventas asociadas.');
     }
   };
 
   const handleCall = () => {
-    if (customer?.phone) {
-      Linking.openURL(`tel:${customer.phone}`);
-    }
+    if (customer?.phone) Linking.openURL(`tel:${customer.phone}`);
   };
 
   const handleEmail = () => {
-    if (customer?.email) {
-      Linking.openURL(`mailto:${customer.email}`);
-    }
+    if (customer?.email) Linking.openURL(`mailto:${customer.email}`);
   };
 
   const handleWhatsApp = () => {
@@ -143,12 +166,12 @@ export default function CustomerDetailScreen() {
           <Ionicons name="arrow-back" size={24} color={Colors.white} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Detalle del Cliente</Text>
-        <TouchableOpacity onPress={handleEdit}>
+        <TouchableOpacity onPress={() => setShowEditModal(true)}>
           <Ionicons name="create-outline" size={24} color={Colors.white} />
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView style={styles.scrollBody} contentContainerStyle={styles.content}>
         {/* Avatar y nombre */}
         <View style={styles.profileSection}>
           <View style={styles.avatarLarge}>
@@ -156,10 +179,11 @@ export default function CustomerDetailScreen() {
           </View>
           <Text style={styles.customerName}>{customer.name}</Text>
           <Text style={styles.customerType}>
-            {customer.ident_type || 'DNI'}: {customer.ident}
+            {customer.ident_type || 'CC'}: {customer.ident}
           </Text>
+          <Text style={styles.customerId}>ID Cliente: {customer.id}</Text>
           <View style={[styles.badge, customer.status === 'active' ? styles.badgeActive : styles.badgeInactive]}>
-            <Text style={styles.badgeText}>
+            <Text style={[styles.badgeText, customer.status === 'active' ? styles.badgeTextActive : styles.badgeTextInactive]}>
               {customer.status === 'active' ? 'Activo' : 'Inactivo'}
             </Text>
           </View>
@@ -189,84 +213,94 @@ export default function CustomerDetailScreen() {
           </View>
         )}
 
-        {/* Información detallada */}
+        {/* Identificación */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Información Personal</Text>
-          
-          <View style={styles.infoCard}>
-            <View style={styles.infoRow}>
-              <Ionicons name="person-outline" size={20} color={Colors.textLight} />
-              <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>Nombre Completo</Text>
-                <Text style={styles.infoValue}>{customer.name}</Text>
-              </View>
-            </View>
-          </View>
-
+          <Text style={styles.sectionTitle}>Identificación</Text>
           <View style={styles.infoCard}>
             <View style={styles.infoRow}>
               <Ionicons name="card-outline" size={20} color={Colors.textLight} />
               <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>Identificación</Text>
+                <Text style={styles.infoLabel}>Tipo de Documento</Text>
+                <Text style={styles.infoValue}>{customer.ident_type || 'N/A'}</Text>
+              </View>
+            </View>
+          </View>
+          <View style={styles.infoCard}>
+            <View style={styles.infoRow}>
+              <Ionicons name="finger-print-outline" size={20} color={Colors.textLight} />
+              <View style={styles.infoContent}>
+                <Text style={styles.infoLabel}>Número de Documento</Text>
                 <Text style={styles.infoValue}>
-                  {customer.ident_type || 'DNI'}: {customer.ident}
+                  {customer.ident}
+                  {customer.dv ? `-${customer.dv}` : ''}
                 </Text>
               </View>
             </View>
           </View>
+        </View>
 
-          {customer.phone && (
-            <View style={styles.infoCard}>
-              <View style={styles.infoRow}>
-                <Ionicons name="call-outline" size={20} color={Colors.textLight} />
-                <View style={styles.infoContent}>
-                  <Text style={styles.infoLabel}>Teléfono</Text>
-                  <Text style={styles.infoValue}>{customer.phone}</Text>
-                </View>
+        {/* Contacto */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Contacto</Text>
+          <View style={styles.infoCard}>
+            <View style={styles.infoRow}>
+              <Ionicons name="mail-outline" size={20} color={Colors.textLight} />
+              <View style={styles.infoContent}>
+                <Text style={styles.infoLabel}>Correo Electrónico</Text>
+                <Text style={styles.infoValue}>{customer.email || 'No registrado'}</Text>
               </View>
             </View>
-          )}
-
-          {customer.email && (
-            <View style={styles.infoCard}>
-              <View style={styles.infoRow}>
-                <Ionicons name="mail-outline" size={20} color={Colors.textLight} />
-                <View style={styles.infoContent}>
-                  <Text style={styles.infoLabel}>Correo Electrónico</Text>
-                  <Text style={styles.infoValue}>{customer.email}</Text>
-                </View>
+          </View>
+          <View style={styles.infoCard}>
+            <View style={styles.infoRow}>
+              <Ionicons name="call-outline" size={20} color={Colors.textLight} />
+              <View style={styles.infoContent}>
+                <Text style={styles.infoLabel}>Teléfono</Text>
+                <Text style={styles.infoValue}>{customer.phone || 'No registrado'}</Text>
               </View>
             </View>
-          )}
+          </View>
+        </View>
 
-          {customer.address && (
-            <View style={styles.infoCard}>
-              <View style={styles.infoRow}>
-                <Ionicons name="location-outline" size={20} color={Colors.textLight} />
-                <View style={styles.infoContent}>
-                  <Text style={styles.infoLabel}>Dirección</Text>
-                  <Text style={styles.infoValue}>{customer.address}</Text>
-                </View>
+        {/* Ubicación */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Ubicación</Text>
+          <View style={styles.infoCard}>
+            <View style={styles.infoRow}>
+              <Ionicons name="location-outline" size={20} color={Colors.textLight} />
+              <View style={styles.infoContent}>
+                <Text style={styles.infoLabel}>Dirección</Text>
+                <Text style={styles.infoValue}>{customer.address || 'No registrada'}</Text>
               </View>
             </View>
-          )}
+          </View>
+        </View>
 
-          {customer.city && (
-            <View style={styles.infoCard}>
-              <View style={styles.infoRow}>
-                <Ionicons name="business-outline" size={20} color={Colors.textLight} />
-                <View style={styles.infoContent}>
-                  <Text style={styles.infoLabel}>Ciudad</Text>
-                  <Text style={styles.infoValue}>{customer.city}</Text>
-                </View>
+        {/* Facturación electrónica */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Facturación Electrónica</Text>
+          <View style={styles.infoCard}>
+            <View style={styles.infoRow}>
+              <Ionicons name="document-text-outline" size={20} color={Colors.textLight} />
+              <View style={styles.infoContent}>
+                <Text style={styles.infoLabel}>Requiere Factura Electrónica DIAN</Text>
+                {customer.requires_electronic_invoice ? (
+                  <View style={[styles.inlineBadge, styles.badgeElectronic]}>
+                    <Text style={[styles.inlineBadgeText, styles.badgeTextElectronic]}>✓ Sí - Factura Electrónica</Text>
+                  </View>
+                ) : (
+                  <View style={[styles.inlineBadge, styles.badgePos]}>
+                    <Text style={[styles.inlineBadgeText, styles.badgeTextPos]}>✗ No - Factura POS</Text>
+                  </View>
+                )}
               </View>
             </View>
-          )}
+          </View>
         </View>
 
         {/* Botón de eliminar */}
-        <TouchableOpacity 
-          style={styles.deleteButton} 
+        <TouchableOpacity
+          style={styles.deleteButton}
           onPress={() => setShowDeleteModal(true)}
         >
           <Ionicons name="trash-outline" size={20} color={Colors.white} />
@@ -274,11 +308,10 @@ export default function CustomerDetailScreen() {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Modal de confirmación de eliminación */}
       <ConfirmModal
         visible={showDeleteModal}
         title="Eliminar Cliente"
-        message={`¿Está seguro de eliminar a ${customer.name}?`}
+        message="¿Estás seguro de que deseas eliminar este cliente? Esta acción no se puede deshacer."
         confirmText="Eliminar"
         type="danger"
         onConfirm={handleDelete}
@@ -296,7 +329,7 @@ export default function CustomerDetailScreen() {
             <View style={{ width: 28 }} />
           </View>
 
-          <ScrollView style={styles.modalContent}>
+          <ScrollView style={styles.modalContent} keyboardShouldPersistTaps="handled">
             <Text style={styles.label}>
               Nombre Completo <Text style={styles.required}>*</Text>
             </Text>
@@ -308,33 +341,31 @@ export default function CustomerDetailScreen() {
               onChangeText={(text) => setFormData({ ...formData, name: text })}
             />
 
-            <Text style={styles.label}>
-              Tipo de Identificación <Text style={styles.required}>*</Text>
-            </Text>
+            <Text style={styles.label}>Tipo de Identificación</Text>
             <View style={styles.idTypeRow}>
-              {(['CC', 'NIT', 'CE', 'TI'] as const).map((type) => (
+              {ID_TYPES.map(({ value, label }) => (
                 <TouchableOpacity
-                  key={type}
+                  key={value}
                   style={[
                     styles.idTypeButton,
-                    formData.identificationType === type && styles.idTypeButtonActive,
+                    formData.identificationType === value && styles.idTypeButtonActive,
                   ]}
-                  onPress={() => setFormData({ ...formData, identificationType: type })}
+                  onPress={() => setFormData({ ...formData, identificationType: value })}
                 >
                   <Text
                     style={[
                       styles.idTypeText,
-                      formData.identificationType === type && styles.idTypeTextActive,
+                      formData.identificationType === value && styles.idTypeTextActive,
                     ]}
                   >
-                    {type}
+                    {label}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
 
             <Text style={styles.label}>
-              DNI/NIT <Text style={styles.required}>*</Text>
+              Número de Identificación <Text style={styles.required}>*</Text>
             </Text>
             <TextInput
               style={styles.input}
@@ -344,6 +375,21 @@ export default function CustomerDetailScreen() {
               onChangeText={(text) => setFormData({ ...formData, identification: text })}
               keyboardType="numeric"
             />
+
+            {formData.identificationType === 'NIT' && (
+              <>
+                <Text style={styles.label}>Dígito de Verificación (DV)</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Ej: 7"
+                  placeholderTextColor={Colors.textLight}
+                  value={formData.dv}
+                  onChangeText={(text) => setFormData({ ...formData, dv: text.slice(0, 1) })}
+                  keyboardType="numeric"
+                  maxLength={1}
+                />
+              </>
+            )}
 
             <Text style={styles.label}>Teléfono</Text>
             <TextInput
@@ -375,18 +421,45 @@ export default function CustomerDetailScreen() {
               onChangeText={(text) => setFormData({ ...formData, address: text })}
             />
 
-            <Text style={styles.label}>Ciudad</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Ej: Bogotá"
-              placeholderTextColor={Colors.textLight}
-              value={formData.city}
-              onChangeText={(text) => setFormData({ ...formData, city: text })}
+            <Text style={styles.label}>Municipio / Ciudad</Text>
+            <MunicipalityAutocomplete
+              initialLabel={formData.municipalityLabel}
+              hasSelection={!!formData.municipalityId}
+              onSelect={handleSelectMunicipality}
+              onClear={() => setFormData((prev) => ({ ...prev, municipalityId: undefined }))}
             />
 
-            <TouchableOpacity style={styles.saveButton} onPress={handleSaveEdit}>
-              <Ionicons name="checkmark-circle" size={20} color={Colors.white} />
-              <Text style={styles.saveButtonText}>Actualizar Cliente</Text>
+            <View style={[styles.switchCard, { marginTop: Spacing.lg }]}>
+              <Text style={styles.switchLabel}>Requiere Factura Electrónica DIAN</Text>
+              <Switch
+                value={formData.requiresElectronicInvoice}
+                onValueChange={(value) => setFormData({ ...formData, requiresElectronicInvoice: value })}
+                trackColor={{ true: Colors.primary }}
+              />
+            </View>
+
+            <View style={[styles.switchCard, { marginTop: Spacing.md }]}>
+              <Text style={styles.switchLabel}>Cliente Activo</Text>
+              <Switch
+                value={formData.isActive}
+                onValueChange={(value) => setFormData({ ...formData, isActive: value })}
+                trackColor={{ true: Colors.primary }}
+              />
+            </View>
+
+            <TouchableOpacity
+              style={[styles.saveButton, isSaving && { opacity: 0.6 }]}
+              onPress={handleSaveEdit}
+              disabled={isSaving}
+            >
+              {isSaving ? (
+                <ActivityIndicator size="small" color={Colors.white} />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle" size={20} color={Colors.white} />
+                  <Text style={styles.saveButtonText}>Actualizar Cliente</Text>
+                </>
+              )}
             </TouchableOpacity>
           </ScrollView>
         </View>
@@ -398,7 +471,7 @@ export default function CustomerDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.primary,
   },
   header: {
     flexDirection: 'row',
@@ -412,6 +485,10 @@ const styles = StyleSheet.create({
     fontSize: FontSize.lg,
     fontWeight: FontWeight.bold,
     color: Colors.white,
+  },
+  scrollBody: {
+    flex: 1,
+    backgroundColor: Colors.background,
   },
   content: {
     padding: Spacing.md,
@@ -442,6 +519,11 @@ const styles = StyleSheet.create({
   customerType: {
     fontSize: FontSize.md,
     color: Colors.textLight,
+    marginBottom: Spacing.xs,
+  },
+  customerId: {
+    fontSize: FontSize.xs,
+    color: Colors.textLight,
     marginBottom: Spacing.sm,
   },
   badge: {
@@ -450,15 +532,43 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.full,
   },
   badgeActive: {
-    backgroundColor: '#E8F5E9',
+    backgroundColor: '#DCFCE7',
   },
   badgeInactive: {
-    backgroundColor: '#FFEBEE',
+    backgroundColor: '#FEE2E2',
   },
   badgeText: {
     fontSize: FontSize.sm,
     fontWeight: FontWeight.semibold,
-    color: Colors.text,
+  },
+  badgeTextActive: {
+    color: '#166534',
+  },
+  badgeTextInactive: {
+    color: '#991B1B',
+  },
+  badgeElectronic: {
+    backgroundColor: '#DBEAFE',
+  },
+  badgePos: {
+    backgroundColor: '#F3F4F6',
+  },
+  badgeTextElectronic: {
+    color: '#1D4ED8',
+  },
+  badgeTextPos: {
+    color: '#4B5563',
+  },
+  inlineBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.full,
+    marginTop: Spacing.xs,
+  },
+  inlineBadgeText: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.semibold,
   },
   quickActions: {
     flexDirection: 'row',
@@ -589,19 +699,36 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary,
   },
   idTypeText: {
-    fontSize: FontSize.md,
+    fontSize: FontSize.sm,
     fontWeight: FontWeight.semibold,
     color: Colors.text,
   },
   idTypeTextActive: {
     color: Colors.white,
   },
+  switchCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    gap: Spacing.md,
+  },
+  switchLabel: {
+    fontSize: FontSize.md,
+    fontWeight: FontWeight.medium,
+    color: Colors.text,
+    flex: 1,
+  },
   saveButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing.sm,
-    backgroundColor: Colors.success,
+    backgroundColor: '#3B82F6',
     borderRadius: BorderRadius.md,
     padding: Spacing.lg,
     marginTop: Spacing.xl,

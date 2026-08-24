@@ -7,7 +7,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { warehouseService } from '@/services/extended';
 import { CreateWarehouseRequest, UpdateWarehouseRequest, Warehouse } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
@@ -25,6 +25,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function WarehousesScreen() {
   const toast = useToast();
+  const { editId } = useLocalSearchParams<{ editId?: string }>();
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -38,6 +39,17 @@ export default function WarehousesScreen() {
   useEffect(() => {
     loadWarehouses();
   }, []);
+
+  // Al llegar desde /warehouses/[id] con "Editar" abrimos el modal directamente.
+  useEffect(() => {
+    if (!editId || warehouses.length === 0) return;
+    const target = warehouses.find((w) => String(w.id) === String(editId));
+    if (target) {
+      setSelectedWarehouse(target);
+      setShowFormModal(true);
+      router.setParams({ editId: undefined });
+    }
+  }, [editId, warehouses]);
 
   const loadWarehouses = async () => {
     try {
@@ -89,7 +101,10 @@ export default function WarehousesScreen() {
   const handleSubmit = async (data: CreateWarehouseRequest | UpdateWarehouseRequest) => {
     try {
       if (selectedWarehouse) {
-        const updated = await warehouseService.updateWarehouse(selectedWarehouse.id, data);
+        const updated = await warehouseService.updateWarehouse(selectedWarehouse.id, {
+          ...data,
+          id: selectedWarehouse.id,
+        });
         setWarehouses(warehouses.map((w) => (w.id === updated.id ? updated : w)));
         toast.success('Bodega actualizada');
       } else {
@@ -106,8 +121,8 @@ export default function WarehousesScreen() {
 
   const filteredWarehouses = warehouses.filter((warehouse) =>
     warehouse.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    warehouse.code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    warehouse.location?.toLowerCase().includes(searchQuery.toLowerCase())
+    warehouse.address?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    warehouse.employee_name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const renderWarehouse = ({ item }: { item: Warehouse }) => (
@@ -115,12 +130,21 @@ export default function WarehousesScreen() {
       <View style={styles.warehouseIcon}>
         <Ionicons name="business" size={24} color={Colors.primary} />
       </View>
-      
+
       <View style={styles.warehouseInfo}>
         <Text style={styles.warehouseName}>{item.name}</Text>
-        {item.code && <Text style={styles.warehouseDetail}>Código: {item.code}</Text>}
-        {item.location && <Text style={styles.warehouseDetail}>📍 {item.location}</Text>}
+        {item.address && <Text style={styles.warehouseDetail}>📍 {item.address}</Text>}
+        {item.phone && <Text style={styles.warehouseDetail}>☎ {item.phone}</Text>}
+        {item.employee_name && <Text style={styles.warehouseDetail}>Encargado: {item.employee_name}</Text>}
       </View>
+
+      <TouchableOpacity
+        style={styles.viewButton}
+        onPress={() => router.push(`/warehouses/${item.id}` as any)}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      >
+        <Ionicons name="eye-outline" size={20} color={Colors.primary} />
+      </TouchableOpacity>
 
       <TouchableOpacity
         style={styles.deleteButton}
@@ -160,7 +184,7 @@ export default function WarehousesScreen() {
         <SearchBar
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholder="Buscar por nombre, código o ubicación..."
+          placeholder="Buscar por nombre, dirección o encargado..."
         />
       </View>
 
@@ -177,6 +201,7 @@ export default function WarehousesScreen() {
           data={filteredWarehouses}
           renderItem={renderWarehouse}
           keyExtractor={(item) => item.id.toString()}
+          style={styles.listBody}
           contentContainerStyle={styles.list}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
         />
@@ -210,9 +235,9 @@ const WarehouseFormModal: React.FC<{
 }> = ({ visible, warehouse, onClose, onSubmit }) => {
   const [formData, setFormData] = useState({
     name: warehouse?.name || '',
-    code: warehouse?.code || '',
-    location: warehouse?.location || '',
-    description: warehouse?.description || '',
+    address: warehouse?.address || '',
+    phone: warehouse?.phone || '',
+    employee_name: warehouse?.employee_name || '',
   });
   const [loading, setLoading] = useState(false);
 
@@ -223,9 +248,9 @@ const WarehouseFormModal: React.FC<{
     try {
       await onSubmit({
         name: formData.name.trim(),
-        code: formData.code.trim() || undefined,
-        location: formData.location.trim() || undefined,
-        description: formData.description.trim() || undefined,
+        address: formData.address.trim() || undefined,
+        phone: formData.phone.trim() || undefined,
+        employee_name: formData.employee_name.trim() || undefined,
       });
     } finally {
       setLoading(false);
@@ -236,12 +261,12 @@ const WarehouseFormModal: React.FC<{
     if (visible && warehouse) {
       setFormData({
         name: warehouse.name,
-        code: warehouse.code || '',
-        location: warehouse.location || '',
-        description: warehouse.description || '',
+        address: warehouse.address || '',
+        phone: warehouse.phone || '',
+        employee_name: warehouse.employee_name || '',
       });
     } else if (!visible) {
-      setFormData({ name: '', code: '', location: '', description: '' });
+      setFormData({ name: '', address: '', phone: '', employee_name: '' });
     }
   }, [visible, warehouse]);
 
@@ -269,37 +294,36 @@ const WarehouseFormModal: React.FC<{
           </View>
 
           <View style={styles.field}>
-            <Text style={styles.label}>Código</Text>
+            <Text style={styles.label}>Dirección</Text>
             <TextInput
               style={styles.input}
-              value={formData.code}
-              onChangeText={(text) => setFormData({ ...formData, code: text })}
-              placeholder="BOD-001"
-              placeholderTextColor={Colors.textSecondary}
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Ubicación</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.location}
-              onChangeText={(text) => setFormData({ ...formData, location: text })}
+              value={formData.address}
+              onChangeText={(text) => setFormData({ ...formData, address: text })}
               placeholder="Calle 123 # 45-67"
               placeholderTextColor={Colors.textSecondary}
             />
           </View>
 
           <View style={styles.field}>
-            <Text style={styles.label}>Descripción</Text>
+            <Text style={styles.label}>Teléfono</Text>
             <TextInput
-              style={[styles.input, styles.textArea]}
-              value={formData.description}
-              onChangeText={(text) => setFormData({ ...formData, description: text })}
-              placeholder="Descripción de la bodega"
+              style={styles.input}
+              value={formData.phone}
+              onChangeText={(text) => setFormData({ ...formData, phone: text })}
+              placeholder="300 123 4567"
               placeholderTextColor={Colors.textSecondary}
-              multiline
-              numberOfLines={3}
+              keyboardType="phone-pad"
+            />
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Encargado</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.employee_name}
+              onChangeText={(text) => setFormData({ ...formData, employee_name: text })}
+              placeholder="Nombre del encargado"
+              placeholderTextColor={Colors.textSecondary}
             />
           </View>
         </ScrollView>
@@ -325,7 +349,7 @@ const WarehouseFormModal: React.FC<{
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.primary,
   },
   centerContainer: {
     flex: 1,
@@ -360,6 +384,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
+  },
+  listBody: {
+    flex: 1,
+    backgroundColor: Colors.background,
   },
   list: {
     padding: 16,
@@ -399,6 +427,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.textSecondary,
     marginBottom: 2,
+  },
+  viewButton: {
+    padding: 8,
   },
   deleteButton: {
     padding: 8,
