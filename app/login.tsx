@@ -134,11 +134,6 @@ export default function LoginScreen() {
             )}
           </TouchableOpacity>
 
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Credenciales de prueba:</Text>
-            <Text style={styles.footerSubtext}>Usuario: admin@tecnostore.com</Text>
-            <Text style={styles.footerSubtext}>Contraseña: admin123</Text>
-          </View>
         </View>
       </ScrollView>
       </KeyboardAvoidingView>
@@ -220,20 +215,6 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontSize: FontSize.lg,
     fontWeight: FontWeight.semibold,
-  },
-  footer: {
-    marginTop: Spacing.xl,
-    alignItems: 'center',
-  },
-  footerText: {
-    fontSize: FontSize.sm,
-    color: Colors.textLight,
-    marginBottom: Spacing.xs,
-  },
-  footerSubtext: {
-    fontSize: FontSize.xs,
-    color: Colors.textLight,
-    fontWeight: FontWeight.medium,
   },
   loadingContainer: {
     justifyContent: 'center',
