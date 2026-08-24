@@ -92,7 +92,14 @@ export async function getDeviceContext(): Promise<DeviceContext> {
     installId: await getOrCreateInstallId(),
     deviceModel: Device.modelName ?? null,
     deviceName: Device.deviceName ?? null,
-    osName: Device.osName ?? Platform.OS,
+    // NO se usa `Device.osName`. Su documentación promete "Android" / "iOS",
+    // pero en Android devuelve `Build.VERSION.BASE_OS`, que en móviles de
+    // fabricante es la huella de build completa (~70 chars), por ejemplo
+    // "samsung/a52sxq/a52sxq:13/TP1A.220624.014/A528BXXU2CWA1:user/release-keys".
+    // Eso tumbó el login en producción (columna de 40) y, peor, al entrar en
+    // la huella estricta del dispositivo haría cerrar la sesión en cada
+    // actualización del fabricante. `Platform.OS` es estable y corto.
+    osName: Platform.OS === 'ios' ? 'iOS' : 'Android',
     osVersion: Device.osVersion ?? String(Platform.Version),
     appVersion: Constants.expoConfig?.version ?? null,
   };
