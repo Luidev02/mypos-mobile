@@ -79,6 +79,13 @@ export default function MoreScreen() {
       perm: 'view_customers',
     },
     {
+      icon: 'book-outline',
+      title: 'Deudores',
+      subtitle: 'Fiado, préstamos y abonos',
+      onPress: () => router.push('/debts' as any),
+      perm: 'view_debts',
+    },
+    {
       icon: 'receipt-outline',
       title: 'Ventas',
       subtitle: 'Historial de ventas',

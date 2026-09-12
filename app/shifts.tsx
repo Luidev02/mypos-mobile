@@ -17,6 +17,11 @@ const PAYMENT_LABELS: Record<string, { label: string; icon: string; bg: string; 
   card_sales: { label: 'Tarjeta', icon: '💳', bg: '#EFF6FF', color: '#1D4ED8' },
   transfer_sales: { label: 'Transferencia', icon: '🏦', bg: '#FAF5FF', color: '#7E22CE' },
   credit_sales: { label: 'Crédito', icon: '📝', bg: '#FFF7ED', color: '#C2410C' },
+  // Movimientos de deudas del turno. Los abonos en efectivo SÍ entraron al
+  // cajón y cuentan para el arqueo; los préstamos salieron de él.
+  debt_payments_cash:   { label: 'Abonos efectivo', icon: '📒', bg: '#ECFDF5', color: '#047857' },
+  debt_payments_other:  { label: 'Abonos otros',    icon: '📒', bg: '#F0F9FF', color: '#0369A1' },
+  loans_disbursed_cash: { label: 'Préstamos',       icon: '💰', bg: '#FEF2F2', color: '#B91C1C' },
 };
 
 function formatDateTime(dateString?: string) {
@@ -106,7 +111,7 @@ export default function ShiftsScreen() {
               🛒 {sales.total_sales} venta{sales.total_sales !== 1 ? 's' : ''} · {formatCurrency(sales.total_amount)}
             </Text>
             <View style={styles.paymentMethodsRow}>
-              {(['cash_sales', 'card_sales', 'transfer_sales', 'credit_sales'] as const).map((key) => {
+              {(['cash_sales', 'card_sales', 'transfer_sales', 'credit_sales', 'debt_payments_cash', 'debt_payments_other', 'loans_disbursed_cash'] as const).map((key) => {
                 const value = sales[key];
                 if (!value) return null;
                 const meta = PAYMENT_LABELS[key];

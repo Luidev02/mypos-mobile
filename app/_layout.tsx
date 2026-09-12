@@ -74,6 +74,9 @@ function RootLayoutNav() {
                         <Stack.Screen name="categories/[id]" options={{ headerShown: false }} />
                         <Stack.Screen name="categories/new" options={{ headerShown: false }} />
                         <Stack.Screen name="customers/index" options={{ headerShown: false }} />
+                        <Stack.Screen name="debts/index" options={{ headerShown: false }} />
+                        <Stack.Screen name="debts/[customerId]" options={{ headerShown: false }} />
+                        <Stack.Screen name="debts/new" options={{ headerShown: false }} />
                         <Stack.Screen name="shifts" options={{ headerShown: false }} />
                         <Stack.Screen name="sales/index" options={{ headerShown: false }} />
                         <Stack.Screen name="purchases/index" options={{ headerShown: false }} />

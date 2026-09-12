@@ -3,7 +3,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
 import { useSale } from '@/contexts/SaleContext';
 import { posService } from '@/services';
-import type { CartItem, CreateSaleRequest, Shift } from '@/types';
+import { debtsService, parseDebtError } from '@/services/debts';
+import type { CartItem, CreateSaleRequest, CreditSettings, Shift } from '@/types';
 import { calculateTax, formatCurrency } from '@/utils/helpers';
 import { canSellQuantity, formatQuantityWithUnit, isWeighable, roundQuantity, unitShortLabel } from '@/utils/units';
 import { Ionicons } from '@expo/vector-icons';
@@ -33,7 +34,17 @@ export default function CartScreen() {
   const { items, subtotal, updateQuantity, removeItem, clearCart } = useCart();
   const { customer, customerId, orderType, saleName, discount, couponId, couponCode, resetSaleData } = useSale();
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer'>('cash');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer' | 'credit'>('cash');
+
+  // ── Venta a crédito (fiado) ──────────────────────────────────────────────
+  // `creditSettings` trae lo que propone el negocio y `creditInfo` la situación
+  // del cliente elegido, para que el cajero vea el cupo ANTES de intentar fiar.
+  const [creditSettings, setCreditSettings] = useState<CreditSettings | null>(null);
+  const [creditInfo, setCreditInfo] = useState<any>(null);
+  const [creditError, setCreditError] = useState<string | null>(null);
+  const [creditDueDate, setCreditDueDate] = useState('');
+  const [creditInitial, setCreditInitial] = useState('');
+  const [creditDescription, setCreditDescription] = useState('');
   const [amountReceived, setAmountReceived] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [activeShift, setActiveShift] = useState<Shift | null>(null);
@@ -43,9 +54,46 @@ export default function CartScreen() {
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [errorMessage, setErrorMessage] = useState({ title: '', message: '' });
 
+  /**
+   * Cliente genérico: el "Consumidor Final" es una ficha compartida por todas
+   * las ventas sin identificar, así que fiarle a él sería no poder cobrarle a
+   * nadie. Se detecta por su cédula genérica cuando ya se consultó su crédito,
+   * y por el nombre mientras tanto.
+   */
+  const isGenericCustomer =
+    !customerId ||
+    customer === 'Consumidor Final' ||
+    String(creditInfo?.ident || '') === '222222222222';
+
   useEffect(() => {
     checkActiveShift();
   }, []);
+
+  // Configuración de crédito del negocio: si no permite fiar, el botón no se
+  // dibuja. Falla en silencio porque el carrito debe seguir cobrando de contado.
+  useEffect(() => {
+    (async () => {
+      try {
+        setCreditSettings(await debtsService.getSettings());
+      } catch {
+        setCreditSettings(null);
+      }
+    })();
+  }, []);
+
+  // Situación de crédito del cliente elegido. Solo se consulta al escoger
+  // "Crédito", para no gravar cada venta de contado con una petición extra.
+  useEffect(() => {
+    if (paymentMethod !== 'credit' || !customerId) {
+      setCreditInfo(null);
+      return;
+    }
+    let alive = true;
+    debtsService.getCustomerAccount(customerId)
+      .then((account) => { if (alive) setCreditInfo(account.customer); })
+      .catch((err) => { if (alive) setCreditError(parseDebtError(err).message); });
+    return () => { alive = false; };
+  }, [paymentMethod, customerId]);
 
   const checkActiveShift = async () => {
     setIsLoadingShift(true);
@@ -172,6 +220,16 @@ export default function CartScreen() {
       return;
     }
 
+    // Una venta fiada tiene que quedar a nombre de alguien concreto.
+    if (paymentMethod === 'credit' && isGenericCustomer) {
+      setErrorMessage({
+        title: 'Falta el cliente',
+        message: 'Selecciona o crea el cliente al que le vas a fiar antes de continuar.',
+      });
+      setShowErrorModal(true);
+      return;
+    }
+
     // El tipo de orden es opcional — igual que el web (`Newsales.jsx` nunca
     // valida `infoS.type` antes de cobrar).
 
@@ -223,8 +281,26 @@ export default function CartScreen() {
         discount_percentage: discount,
         subtotal: subtotal,
         total: total,
-        amount_received: paymentMethod === 'cash' ? parseFloat(amountReceived || '0') : total,
+        // En una venta a crédito no entra plata por la venta: lo que entre va
+        // como abono inicial de la deuda, no como monto recibido de la orden.
+        amount_received: paymentMethod === 'credit'
+          ? 0
+          : (paymentMethod === 'cash' ? parseFloat(amountReceived || '0') : total),
         change_amount: paymentMethod === 'cash' ? change : 0,
+        ...(paymentMethod === 'credit' ? {
+          credit: {
+            due_date: creditDueDate || null,
+            interest_type: (creditSettings?.default_interest_type || 'none') as 'none' | 'fixed' | 'percent',
+            interest_rate: Number(creditSettings?.default_interest_rate) || 0,
+            description: creditDescription.trim() || null,
+            ...(Math.round(Number(creditInitial) || 0) > 0 ? {
+              initial_payment: {
+                amount: Math.min(Math.round(Number(creditInitial) || 0), Math.round(total)),
+                payment_method: 'cash' as const,
+              },
+            } : {}),
+          },
+        } : {}),
         products: items.map(item => ({
           product_id: item.product_id,
           quantity: item.quantity,
@@ -293,7 +369,7 @@ export default function CartScreen() {
       ),
       '',
       `Total: ${formatCurrency(completedSale.total || completedSale.total_amount || 0)}`,
-      `Método: ${completedSale.payment_method === 'cash' ? 'Efectivo' : 'Transferencia'}`,
+      `Método: ${completedSale.payment_method === 'cash' ? 'Efectivo' : completedSale.payment_method === 'credit' ? 'Crédito (fiado)' : 'Transferencia'}`,
     ];
     if (completedSale.payment_method === 'cash') {
       lines.push(`Recibido: ${formatCurrency(completedSale.amount_received)}`);
@@ -584,6 +660,139 @@ export default function CartScreen() {
                 </TouchableOpacity>
               </View>
 
+              {/* Crédito (fiado). Solo aparece si el negocio lo permite. */}
+              {creditSettings?.credit_sales_enabled ? (
+                <TouchableOpacity
+                  style={[
+                    styles.paymentMethod,
+                    { width: '100%', marginBottom: Spacing.md },
+                    paymentMethod === 'credit' && styles.paymentMethodActive,
+                  ]}
+                  onPress={() => {
+                    setPaymentMethod('credit');
+                    setAmountReceived('');
+                    setCreditError(null);
+                    if (!creditDueDate) {
+                      const d = new Date();
+                      d.setDate(d.getDate() + Number(creditSettings?.default_term_days ?? 30));
+                      setCreditDueDate(d.toISOString().slice(0, 10));
+                    }
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name="book-outline"
+                    size={32}
+                    color={paymentMethod === 'credit' ? Colors.white : Colors.primary}
+                  />
+                  <Text
+                    style={[
+                      styles.paymentMethodText,
+                      paymentMethod === 'credit' && styles.paymentMethodTextActive,
+                    ]}
+                  >
+                    Crédito (Fiado)
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+
+              {/* Panel de crédito */}
+              {paymentMethod === 'credit' && (
+                <View style={styles.creditPanel}>
+                  {isGenericCustomer ? (
+                    <View style={styles.creditWarnBox}>
+                      <Text style={styles.creditWarnText}>
+                        Una venta fiada tiene que quedar a nombre de alguien. Selecciona o crea el
+                        cliente antes de continuar.
+                      </Text>
+                    </View>
+                  ) : creditInfo ? (
+                    <View style={styles.creditInfoBox}>
+                      <Text style={styles.creditCustomer}>{creditInfo.name}</Text>
+                      <View style={styles.creditInfoRow}>
+                        <Text style={styles.creditInfoLabel}>Ya debe</Text>
+                        <Text style={styles.creditInfoValue}>
+                          {formatCurrency(Number(creditInfo.debt_balance) || 0)}
+                        </Text>
+                      </View>
+                      <View style={styles.creditInfoRow}>
+                        <Text style={styles.creditInfoLabel}>Cupo disponible</Text>
+                        <Text style={styles.creditInfoValue}>
+                          {creditInfo.available_credit === null
+                            ? 'Sin límite'
+                            : formatCurrency(Number(creditInfo.available_credit) || 0)}
+                        </Text>
+                      </View>
+                      {!creditInfo.credit_enabled && (
+                        <Text style={styles.creditWarnText}>
+                          Este cliente tiene el crédito deshabilitado.
+                        </Text>
+                      )}
+                      {Number(creditInfo.overdue_count) > 0 && (
+                        <Text style={styles.creditWarnText}>
+                          Tiene {creditInfo.overdue_count} deuda(s) vencida(s).
+                        </Text>
+                      )}
+                    </View>
+                  ) : null}
+
+                  {!!creditError && (
+                    <View style={styles.creditWarnBox}>
+                      <Text style={styles.creditWarnText}>{creditError}</Text>
+                    </View>
+                  )}
+
+                  <Text style={styles.inputLabel}>¿Para cuándo paga? (AAAA-MM-DD)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={creditDueDate}
+                    onChangeText={setCreditDueDate}
+                    placeholder="2026-10-12"
+                    placeholderTextColor={Colors.textLight}
+                  />
+
+                  <Text style={styles.inputLabel}>¿Abona algo ahora? (opcional)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={creditInitial}
+                    onChangeText={setCreditInitial}
+                    keyboardType="numeric"
+                    placeholder="$0"
+                    placeholderTextColor={Colors.textLight}
+                  />
+
+                  <Text style={styles.inputLabel}>Concepto (opcional)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={creditDescription}
+                    onChangeText={setCreditDescription}
+                    placeholder="Ej: mercado de la semana"
+                    placeholderTextColor={Colors.textLight}
+                  />
+
+                  <View style={styles.creditSummary}>
+                    <View style={styles.creditInfoRow}>
+                      <Text style={styles.creditInfoLabel}>Venta</Text>
+                      <Text style={styles.creditInfoValue}>{formatCurrency(total)}</Text>
+                    </View>
+                    {Math.round(Number(creditInitial) || 0) > 0 && (
+                      <View style={styles.creditInfoRow}>
+                        <Text style={styles.creditInfoLabel}>Abona ahora</Text>
+                        <Text style={[styles.creditInfoValue, { color: Colors.success }]}>
+                          − {formatCurrency(Math.min(Math.round(Number(creditInitial) || 0), total))}
+                        </Text>
+                      </View>
+                    )}
+                    <View style={[styles.creditInfoRow, styles.creditSummaryTotal]}>
+                      <Text style={styles.creditSummaryLabel}>Queda debiendo</Text>
+                      <Text style={styles.creditSummaryValue}>
+                        {formatCurrency(Math.max(total - Math.min(Math.round(Number(creditInitial) || 0), total), 0))}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              )}
+
               {paymentMethod === 'cash' && (
                 <>
                   <Text style={styles.inputLabel}>Monto Recibido:</Text>
@@ -736,7 +945,7 @@ export default function CartScreen() {
                 <View style={styles.successRow}>
                   <Text style={styles.successLabel}>Método:</Text>
                   <Text style={styles.successValue}>
-                    {completedSale.payment_method === 'cash' ? 'Efectivo' : 'Transferencia'}
+                    {completedSale.payment_method === 'cash' ? 'Efectivo' : completedSale.payment_method === 'credit' ? 'Crédito (fiado)' : 'Transferencia'}
                   </Text>
                 </View>
               </View>
@@ -1052,6 +1261,82 @@ const styles = StyleSheet.create({
   },
   paymentMethodTextActive: {
     color: Colors.white,
+  },
+
+  // ── Panel de venta a crédito ──────────────────────────────────────────
+  creditPanel: {
+    borderWidth: 2,
+    borderColor: '#C2410C',
+    backgroundColor: '#FFF7ED',
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    marginBottom: Spacing.md,
+  },
+  creditInfoBox: {
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: '#FDBA74',
+    borderRadius: BorderRadius.md,
+    padding: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  creditCustomer: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.bold,
+    color: '#9A3412',
+    marginBottom: 4,
+  },
+  creditInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 2,
+  },
+  creditInfoLabel: {
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+  },
+  creditInfoValue: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
+    color: Colors.text,
+  },
+  creditWarnBox: {
+    backgroundColor: Colors.errorLight,
+    borderWidth: 1,
+    borderColor: Colors.error,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  creditWarnText: {
+    fontSize: FontSize.xs,
+    color: Colors.error,
+    fontWeight: FontWeight.semibold,
+    marginTop: 4,
+  },
+  creditSummary: {
+    marginTop: Spacing.sm,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: '#FDBA74',
+    borderRadius: BorderRadius.md,
+    padding: Spacing.sm,
+  },
+  creditSummaryTotal: {
+    marginTop: Spacing.xs,
+    paddingTop: Spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: '#FDBA74',
+  },
+  creditSummaryLabel: {
+    fontSize: FontSize.md,
+    fontWeight: FontWeight.bold,
+    color: Colors.text,
+  },
+  creditSummaryValue: {
+    fontSize: FontSize.md,
+    fontWeight: FontWeight.bold,
+    color: '#C2410C',
   },
   inputLabel: {
     fontSize: FontSize.md,

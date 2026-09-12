@@ -24,6 +24,7 @@ const modules: ModuleCard[] = [
   { id: 'products', title: 'Productos', icon: 'pricetag', route: '/products', color: Colors.footer, perm: 'view_products' },
   { id: 'customers', title: 'Clientes', icon: 'people', route: '/customers', color: '#8B6F6F', perm: 'view_customers' },
   { id: 'sales', title: 'Ventas', icon: 'receipt', route: '/sales', color: Colors.primaryDark, perm: 'view_sales' },
+  { id: 'debts', title: 'Deudores', icon: 'book', route: '/debts', color: '#C2410C', perm: 'view_debts' },
   { id: 'inventory', title: 'Inventario', icon: 'cube', route: '/(tabs)/inventory', color: '#9D7E7E', perm: 'view_inventory' },
   { id: 'warehouses', title: 'Bodegas', icon: 'business', route: '/warehouses', color: '#A08080', perm: 'view_warehouses' },
   { id: 'taxes', title: 'Impuestos', icon: 'calculator', route: '/taxes', color: Colors.dark, perm: 'view_taxes' },

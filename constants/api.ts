@@ -72,6 +72,24 @@ export const ENDPOINTS = {
     SEARCH: '/api/pos/customers/search',
   },
 
+  // Deudores: ventas a crédito (fiado), préstamos y abonos
+  DEBTS: {
+    SUMMARY: '/api/debts/summary',
+    DEBTORS: '/api/debts/debtors',
+    LIST: '/api/debts',
+    DETAIL: (id: number) => `/api/debts/${id}`,
+    CREATE: '/api/debts',
+    UPDATE: (id: number) => `/api/debts/${id}`,
+    CANCEL: (id: number) => `/api/debts/${id}/cancel`,
+    PAYMENTS: (id: number) => `/api/debts/${id}/payments`,
+    CHARGES: (id: number) => `/api/debts/${id}/charges`,
+    VOID_PAYMENT: (paymentId: number) => `/api/debts/payments/${paymentId}/void`,
+    RECEIPT: (paymentId: number) => `/api/debts/payments/${paymentId}/receipt`,
+    CUSTOMER_ACCOUNT: (customerId: number) => `/api/debts/customers/${customerId}`,
+    AGING: '/api/debts/aging',
+    SETTINGS: '/api/debts/settings',
+  },
+
   // Categories
   CATEGORIES: {
     LIST: '/api/categories',

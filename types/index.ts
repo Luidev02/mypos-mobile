@@ -82,6 +82,15 @@ export interface Customer {
   municipality_name?: string;
   municipality_department?: string;
   status: 'active' | 'suspend' | 'disable';
+  /** Crédito: el backend los expone en el listado y en el detalle. */
+  credit_enabled?: boolean | number;
+  credit_limit?: number | null;
+  credit_notes?: string | null;
+  /** Saldo vivo del cliente, derivado de sus deudas abiertas. */
+  debt_balance?: number;
+  overdue_count?: number;
+  effective_credit_limit?: number | null;
+  available_credit?: number | null;
 }
 
 export interface CreateCustomerRequest {
@@ -157,13 +166,26 @@ export interface CreateSaleRequest {
   customer_id: number;
   customer_name?: string;
   sale_type?: string; // carry, delivery, dine_in
-  payment_method: 'cash' | 'transfer';
+  payment_method: 'cash' | 'transfer' | 'credit';
   coupon_id?: number | null;
   discount_percentage?: number;
   subtotal?: number;
   total?: number;
   amount_received?: number;
   change_amount?: number;
+  /** Datos del fiado. Solo viaja cuando payment_method === 'credit'. */
+  credit?: {
+    due_date?: string | null;
+    interest_type?: 'none' | 'fixed' | 'percent';
+    interest_rate?: number;
+    description?: string | null;
+    force_limit?: boolean;
+    initial_payment?: {
+      amount: number;
+      payment_method: 'cash' | 'card' | 'transfer' | 'other';
+      reference?: string | null;
+    };
+  };
   products: Array<{
     product_id: number;
     quantity: number;
@@ -237,6 +259,161 @@ export interface ShiftSalesSummary {
   card_profit: number;
   transfer_profit: number;
   credit_profit: number;
+  /**
+   * Movimientos de deudas del turno. Se calculan desde el libro de abonos y
+   * deudas, no desde los acumulados del turno, así salen correctos también
+   * para turnos abiertos antes de existir el módulo.
+   */
+  debt_payments_cash?: number;
+  debt_payments_other?: number;
+  debt_payments_count?: number;
+  loans_disbursed_cash?: number;
+  debts_generated?: number;
+}
+
+/** Una obligación del cliente: venta fiada, préstamo o deuda registrada a mano. */
+export interface Debt {
+  id: number;
+  customer_id: number;
+  customer_name?: string;
+  customer_ident?: string;
+  customer_phone?: string;
+  type: 'sale' | 'loan' | 'manual';
+  order_id?: number | null;
+  order_invoice_number?: string | null;
+  description?: string | null;
+  notes?: string | null;
+  principal_amount: number;
+  interest_type: 'none' | 'fixed' | 'percent';
+  interest_rate: number;
+  interest_amount: number;
+  charges_amount: number;
+  total_amount: number;
+  paid_amount: number;
+  balance: number;
+  status: 'pending' | 'partial' | 'paid' | 'cancelled';
+  due_date?: string | null;
+  disbursement_method?: 'cash' | 'transfer' | null;
+  user_id: number;
+  user_name?: string;
+  shift_id?: number | null;
+  cash_register_id?: number | null;
+  cash_register_name?: string | null;
+  created_at: string;
+  paid_at?: string | null;
+  /** Derivados en SQL: "vencida" no es un estado guardado. */
+  is_overdue?: number | boolean;
+  days_overdue?: number;
+  payments?: DebtPayment[];
+  events?: DebtEvent[];
+  items?: any[];
+}
+
+export interface DebtPayment {
+  id: number;
+  debt_id: number;
+  customer_id: number;
+  customer_name?: string;
+  receipt_number: string;
+  amount: number;
+  payment_method: 'cash' | 'card' | 'transfer' | 'other';
+  reference?: string | null;
+  notes?: string | null;
+  balance_before: number;
+  balance_after: number;
+  status: 'active' | 'voided';
+  user_id: number;
+  user_name?: string;
+  shift_id?: number | null;
+  cash_register_name?: string | null;
+  created_at: string;
+  voided_at?: string | null;
+  void_reason?: string | null;
+}
+
+export interface DebtEvent {
+  id: number;
+  event_type: 'created' | 'payment' | 'payment_voided' | 'charge' | 'updated' | 'cancelled' | 'paid';
+  amount?: number | null;
+  payload?: any;
+  user_name?: string;
+  cash_register_name?: string | null;
+  created_at: string;
+}
+
+/** Una fila de la lista de deudores: un cliente con saldo vivo. */
+export interface Debtor {
+  customer_id: number;
+  customer_name: string;
+  customer_ident: string;
+  customer_ident_type?: string;
+  customer_phone?: string;
+  credit_enabled?: number | boolean;
+  credit_limit?: number | null;
+  debts_count: number;
+  balance: number;
+  overdue_balance: number;
+  overdue_count: number;
+  oldest_debt_at?: string;
+  next_due_date?: string | null;
+  max_days_overdue?: number;
+  last_payment_at?: string | null;
+}
+
+export interface DebtsSummary {
+  total_receivable: number;
+  overdue_amount: number;
+  debtors_count: number;
+  open_debts_count: number;
+  overdue_count: number;
+  by_type: { sales: number; loans: number; manual: number };
+  today: { payments_count: number; total_amount: number; cash_amount: number };
+  active_shift: null | {
+    shift_id: number;
+    payments_count: number;
+    total_amount: number;
+    cash_amount: number;
+  };
+}
+
+export interface CreditSettings {
+  company_id: number;
+  credit_sales_enabled: number | boolean;
+  default_term_days: number;
+  default_interest_type: 'none' | 'fixed' | 'percent';
+  default_interest_rate: number;
+  default_credit_limit: number | null;
+  block_if_overdue: number | boolean;
+  receipt_prefix: string;
+  receipt_next_number: number;
+}
+
+export interface CustomerAccount {
+  customer: Customer & {
+    effective_credit_limit: number | null;
+    available_credit: number | null;
+    debt_balance: number;
+    overdue_balance: number;
+    overdue_count: number;
+    open_debts_count: number;
+  };
+  debts: Debt[];
+  payments: DebtPayment[];
+  timeline: Array<{
+    kind: 'debt' | 'payment';
+    at: string;
+    debt_id: number;
+    amount: number;
+    balance: number;
+    [key: string]: any;
+  }>;
+  totals: {
+    balance: number;
+    overdue_balance: number;
+    open_debts: number;
+    credit_limit: number | null;
+    available_credit: number | null;
+  };
 }
 
 export interface Shift {
